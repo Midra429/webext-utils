@@ -29,16 +29,18 @@ Firefox156.0.1の `storage.session` で、名前空間なしの `toString` キ�
 
 ```sh
 bun install --frozen-lockfile
+bun run test:package
 bun run typecheck
 bun run test:types
 bun run check
 bun run test
-bun run test:package
 bun run build:example
 bun run test:runtime
 ```
 
 `test:package` はclean buildとoffline packを行い、一時ディレクトリに展開したパッケージだけを独立consumerから利用します。Bundler / NodeNextの生成型、全サブパスのNode ESM import、同梱例、DOM/Chrome/Firefox/Bun型なしのconsumer、SSR、import副作用、root Tree Shakingと生成bundle実行、公開ファイルと文書リンクを検証します。registryに書き込む操作はありません。`npm pack` 自体も `prepack` で再ビルドします。
+
+利用例とbrowser統合fixtureはビルド済みパッケージのexportsを参照するため、クリーンなチェックアウトでは `typecheck` より先に `test:package`（または `build`）を実行してください。リリースworkflowもこの順序で実行します。
 
 `test:runtime` はnative fake上で100並行要求後のpending、idle時の追加接続、全解除後のPort / listener / session記録を確認します。実ブラウザの性能測定とは区別してください。
 
