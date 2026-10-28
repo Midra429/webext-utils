@@ -1,0 +1,27 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "exactOptionalPropertyTypes": true,
+    "noUncheckedIndexedAccess": true,
+    "noEmit": true,
+    "types": [],
+    "lib": ["ES2022", "DOM"],
+    "paths": {
+      "@midra/webext-utils/context": ["../../src/context/index.ts"],
+      "@midra/webext-utils/messaging": ["../../src/messaging/index.ts"],
+      "@midra/webext-utils/storage": ["../../src/storage/index.ts"],
+      "@midra/webext-utils/sidePanel": ["../../src/sidePanel/index.ts"],
+      "@midra/webext-utils/popout": ["../../src/popout/index.ts"]
+    }
+  },
+  "include": [
+    "context.ts",
+    "messaging.ts",
+    "storage.ts",
+    "sidePanel.ts",
+    "popout.ts"
+  ]
+}

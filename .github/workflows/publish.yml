@@ -1,0 +1,136 @@
+name: Publish to npm
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Version bump type
+        type: choice
+        required: true
+        default: patch
+        options:
+          - patch
+          - minor
+          - major
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    if: github.repository == 'Midra429/webext-utils'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Check out release source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.release.tag_name || github.sha }}
+          persist-credentials: ${{ github.event_name == 'workflow_dispatch' }}
+
+      - name: Require default branch for version bumps
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          if [[ "$GITHUB_REF" != "refs/heads/$DEFAULT_BRANCH" ]]; then
+            echo '::error::Run version bumps from the default branch.'
+            exit 1
+          fi
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: '1.4.4'
+          no-cache: true
+
+      - name: Bump package version
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          BUMP_TYPE: ${{ inputs.bump }}
+        run: |
+          case "$BUMP_TYPE" in
+            patch|minor|major)
+              npm version "$BUMP_TYPE" --no-git-tag-version --ignore-scripts
+              ;;
+            *)
+              echo '::error::Unsupported bump type.'
+              exit 1
+              ;;
+          esac
+
+      - name: Validate release version
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { appendFileSync, readFileSync } from 'node:fs'
+
+          const { version } = JSON.parse(readFileSync('package.json', 'utf8'))
+          if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(version)) {
+            throw new Error('Version must use the format major.minor.patch')
+          }
+          if (process.env.GITHUB_EVENT_NAME === 'release' && process.env.RELEASE_TAG !== `v${version}`) {
+            throw new Error(`Release tag must be v${version}`)
+          }
+          appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`)
+          NODE
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Check formatting and lint
+        run: bun run check
+
+      - name: Check types
+        run: |
+          bun run typecheck
+          bun run test:types
+
+      - name: Run unit tests
+        run: bun run test
+
+      - name: Build and verify package
+        run: bun run test:package
+
+      - name: Commit version and push release tag
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          RELEASE_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package.json
+          git commit -m "chore: release v$VERSION"
+          git tag "v$VERSION"
+          git push --atomic origin "HEAD:refs/heads/$RELEASE_BRANCH" "refs/tags/v$VERSION"
+
+      - name: Publish to npm
+        run: npm publish --access public --tag latest
+
+      - name: Create GitHub Release
+        if: github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: gh release create "v$VERSION" --verify-tag --title "v$VERSION" --generate-notes

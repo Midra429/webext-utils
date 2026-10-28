@@ -1,0 +1,85 @@
+{
+  "name": "@midra/webext-utils",
+  "version": "0.0.0",
+  "description": "Chrome・Firefox の Manifest V3 拡張機能向けの、型安全で依存関係のないユーティリティ集",
+  "author": "Midra <me@midra.me> (https://github.com/Midra429)",
+  "homepage": "https://github.com/Midra429/webext-utils#readme",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Midra429/webext-utils.git"
+  },
+  "publishConfig": {
+    "registry": "https://registry.npmjs.org",
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test tests",
+    "check": "biome check --error-on-warnings src tests scripts examples/*.ts examples/*.json tsdown.config.ts package.json tsconfig.json biome.json",
+    "test:types": "tsc -p tests/types/tsconfig.json && tsc -p tests/types/tsconfig.messaging-empty.json",
+    "test:package": "bun run build && bun scripts/verify-package.ts",
+    "test:browser": "bun scripts/test-browser.ts",
+    "test:side-panel": "bun scripts/test-side-panel.ts",
+    "test:popout": "bun scripts/test-popout.ts",
+    "build:example": "bun scripts/build-example.ts",
+    "test:integration": "bun run build && bun scripts/test-browser.ts --integration",
+    "test:runtime": "bun scripts/measure-runtime.ts",
+    "prepack": "bun run build"
+  },
+  "type": "module",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "docs/api.md",
+    "docs/compatibility.md",
+    "docs/context.md",
+    "docs/integration.md",
+    "docs/main-world.md",
+    "docs/messaging.md",
+    "docs/migrations.md",
+    "docs/popout.md",
+    "docs/side-panel.md",
+    "docs/storage.md",
+    "docs/testing.md",
+    "examples/*.ts",
+    "examples/*.html",
+    "examples/*.json",
+    "examples/README.md"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./context": {
+      "types": "./dist/context/index.d.ts",
+      "import": "./dist/context/index.js"
+    },
+    "./storage": {
+      "types": "./dist/storage/index.d.ts",
+      "import": "./dist/storage/index.js"
+    },
+    "./messaging": {
+      "types": "./dist/messaging/index.d.ts",
+      "import": "./dist/messaging/index.js"
+    },
+    "./sidePanel": {
+      "types": "./dist/sidePanel/index.d.ts",
+      "import": "./dist/sidePanel/index.js"
+    },
+    "./popout": {
+      "types": "./dist/popout/index.d.ts",
+      "import": "./dist/popout/index.js"
+    }
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.6.3",
+    "@types/bun": "^1.4.4",
+    "tsdown": "^0.23.3",
+    "typescript": "^7.0.2"
+  },
+  "sideEffects": false
+}

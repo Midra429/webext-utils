@@ -1,0 +1,402 @@
+{
+  "stage": "F",
+  "date": "2026-10-21",
+  "timezone": "Asia/Tokyo",
+  "os": "macOS 27.0.1",
+  "architecture": "arm64",
+  "unit": {
+    "passed": 171,
+    "failed": 0,
+    "assertions": 934,
+    "added": 31
+  },
+  "checks": [
+    "typecheck",
+    "test:types",
+    "check",
+    "test:package"
+  ],
+  "runs": [
+    {
+      "browser": {
+        "protocolVersion": "1.3",
+        "product": "Chrome/142.0.7444.175",
+        "revision": "@302067f14a4ea3f42001580e6101fa25ed343445",
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/142.0.0.0 Safari/537.36",
+        "jsVersion": "14.2.231.21"
+      },
+      "mode": "headless / CDP native pointer",
+      "results": [
+        {
+          "name": "sidePanel:configuration",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:no-gesture",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-window",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-window",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-default",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-default",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-after-await",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-after-await",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:tab-close-boundary",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-tab",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-tab",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:unsubscribe-state",
+          "passed": true
+        }
+      ],
+      "family": "chrome"
+    },
+    {
+      "browser": {
+        "protocolVersion": "1.3",
+        "product": "Chrome/145.0.7632.117",
+        "revision": "@de4e5d6e13b995f5e04137970c0e8ec456017467",
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/145.0.0.0 Safari/537.36",
+        "jsVersion": "14.5.201.12"
+      },
+      "mode": "headless / CDP native pointer",
+      "results": [
+        {
+          "name": "sidePanel:configuration",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:no-gesture",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-window",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-window",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-default",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-default",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-after-await",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-after-await",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:tab-close-boundary",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-tab",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-tab",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:unsubscribe-state",
+          "passed": true
+        }
+      ],
+      "family": "chrome"
+    },
+    {
+      "browser": {
+        "protocolVersion": "1.3",
+        "product": "Chrome/156.0.8078.47",
+        "revision": "@1d17a2e2ee147bb7d6ae2ab6abdb3a2510c17775",
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+        "jsVersion": "15.6.75.19"
+      },
+      "mode": "headless / CDP native pointer",
+      "results": [
+        {
+          "name": "sidePanel:configuration",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:no-gesture",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-window",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-window",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-default",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-default",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-after-await",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-after-await",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:tab-close-boundary",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-tab",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-tab",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:unsubscribe-state",
+          "passed": true
+        }
+      ],
+      "family": "chrome"
+    },
+    {
+      "browser": {
+        "name": "firefox",
+        "version": "145.0",
+        "driver": "0.37.1",
+        "headless": true,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:145.0) Gecko/20100101 Firefox/145.0"
+      },
+      "mode": "headless / WebDriver native click",
+      "results": [
+        {
+          "name": "sidePanel:configuration",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:no-gesture",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-window",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-window",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-default",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-default",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-after-await",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-after-await",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:tab-close-boundary",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-tab",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-tab",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:unsubscribe-state",
+          "passed": true
+        }
+      ],
+      "family": "firefox"
+    },
+    {
+      "browser": {
+        "name": "firefox",
+        "version": "156.0.1",
+        "driver": "0.37.1",
+        "headless": true,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:156.0) Gecko/20100101 Firefox/156.0"
+      },
+      "mode": "headless / WebDriver native click",
+      "results": [
+        {
+          "name": "sidePanel:configuration",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:no-gesture",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-window",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-window",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-default",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-default",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-after-await",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-after-await",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:tab-close-boundary",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-tab",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-tab",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:unsubscribe-state",
+          "passed": true
+        }
+      ],
+      "family": "firefox"
+    },
+    {
+      "browser": {
+        "name": "firefox",
+        "version": "158.0.1",
+        "driver": "0.37.1",
+        "headless": false,
+        "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:158.0) Gecko/20100101 Firefox/158.0"
+      },
+      "mode": "headed / ordinary UI click through computer use",
+      "results": [
+        {
+          "name": "sidePanel:configuration",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:no-gesture",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-window",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-window",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-default",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-default",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-after-await",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-after-await",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:tab-close-boundary",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:open-tab",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:close-tab",
+          "passed": true
+        },
+        {
+          "name": "sidePanel:unsubscribe-state",
+          "passed": true
+        }
+      ],
+      "family": "firefox"
+    }
+  ],
+  "observations": {
+    "chrome_default_target": "Active-window resolution await succeeded on 142/145/156. Explicit targets start native calls synchronously.",
+    "firefox_await": "Direct clicks succeed; an awaited windows.getLastFocused before open/close rejects with USER_GESTURE_REQUIRED and preserves state on 145/156/158.",
+    "chrome_tab_close": "142 wrapper rejects before native call; direct native close(tabId) falls back to closing global panel. 145/156 reject with only global panel and close a real tab-specific panel with tabId event.",
+    "state": "Chrome stays unknown; Firefox reads native boolean.",
+    "firefox_startup": "LaunchServices with a fresh temporary profile, then geckodriver --connect-existing, avoids the macOS 27 direct-exec startup problem.",
+    "firefox158": "Configuration/state tests run in fixture; ten user-action steps use ordinary visible UI clicks because content WebDriver commands reject privileged browsing contexts. No system-access flags or privacy-setting changes.",
+    "test_timing": "Separate clicks wait 600ms for native animations. Tab-close assertions match the target tabId among events to exclude unrelated tab-switch events."
+  },
+  "not_verified": [
+    "Other OSes/private browsing",
+    "Actual service-worker shutdown then getState",
+    "All other extension UI contexts and message-relayed gestures",
+    "Prior stage A-E Firefox integration suites were not rerun successfully in this stage"
+  ]
+}

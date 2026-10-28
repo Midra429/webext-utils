@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "webext-utils example",
+  "version": "0.0.1",
+  "permissions": ["storage", "sidePanel"],
+  "action": {
+    "default_popup": "ui.html"
+  },
+  "host_permissions": ["https://example.com/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://example.com/*"],
+      "js": ["isolated.js"],
+      "world": "ISOLATED",
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://example.com/*"],
+      "js": ["main.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    }
+  ],
+  "minimum_chrome_version": "142",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "side_panel": {
+    "default_path": "ui.html"
+  }
+}

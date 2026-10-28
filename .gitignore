@@ -1,0 +1,28 @@
+# Dependencies and generated output
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+*.tgz
+
+# Local environment, caches and logs
+.env
+.env.*
+!.env.example
+.cache/
+.npm/
+*.log
+
+# Editor and OS files
+.DS_Store
+._*
+Thumbs.db
+Desktop.ini
+*~
+.history/
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets

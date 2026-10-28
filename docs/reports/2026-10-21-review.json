@@ -1,0 +1,1487 @@
+{
+  "timestamp": "2026-10-21T09:07:33.971997+00:00",
+  "purpose": "R1-R6修正後の最終検証。修正前再現reportとは別の成功検証記録。",
+  "environment": {
+    "os": "macOS27.0.1 (26A434)",
+    "arch": "arm64",
+    "bun": "1.4.3",
+    "typescript": "7.0.2",
+    "tsdown": "0.23.1"
+  },
+  "checks": {
+    "unit": {
+      "passed": 214,
+      "failed": 0,
+      "assertions": 1155,
+      "logSummary": [
+        " 214 pass",
+        " 0 fail",
+        " 1155 expect() calls",
+        "Ran 214 tests across 8 files. [13.52s]"
+      ]
+    },
+    "typecheck": {
+      "passed": true,
+      "output": "$ tsc --noEmit\n"
+    },
+    "types": {
+      "passed": true,
+      "output": "$ tsc -p tests/types/tsconfig.json && tsc -p tests/types/tsconfig.messaging-empty.json\n"
+    },
+    "biome": {
+      "passed": true,
+      "files": 86,
+      "output": "$ biome check src tests scripts examples/*.ts examples/*.json tsdown.config.ts\nChecked 86 files in 49ms. No fixes applied.\n"
+    },
+    "buildExample": {
+      "passed": true
+    },
+    "package": {
+      "bundles": {
+        "messaging": {
+          "minified": 48529,
+          "gzip": 13955
+        },
+        "storage": {
+          "minified": 65927,
+          "gzip": 19298
+        },
+        "sidePanel": {
+          "minified": 5649,
+          "gzip": 2322
+        },
+        "popout": {
+          "minified": 50827,
+          "gzip": 15294
+        },
+        "context": {
+          "minified": 7511,
+          "gzip": 2862
+        },
+        "rootContext": {
+          "minified": 7511,
+          "gzip": 2861
+        }
+      },
+      "runtimeDependencies": [],
+      "checks": [
+        "offline archive",
+        "packaged document links",
+        "exports",
+        "Bundler types",
+        "NodeNext types",
+        "shipped examples",
+        "SSR",
+        "side-effect-free imports",
+        "root tree shaking",
+        "shaken bundle execution"
+      ]
+    },
+    "runtime": {
+      "environment": "Bun / fake native boundary",
+      "initial": {
+        "ports": 0,
+        "listeners": 0,
+        "records": 0,
+        "pending": 0
+      },
+      "registered": {
+        "ports": 1,
+        "listeners": 3,
+        "records": 1,
+        "pending": 0
+      },
+      "concurrentRequests": 100,
+      "settled": {
+        "ports": 1,
+        "listeners": 3,
+        "records": 1,
+        "pending": 0
+      },
+      "idleConnectionsAdded": 0,
+      "disposed": {
+        "ports": 0,
+        "listeners": 0,
+        "records": 0,
+        "pending": 0
+      }
+    }
+  },
+  "browsers": {
+    "chrome142": {
+      "basic": {
+        "timestamp": "2026-10-21T09:03:05.278Z",
+        "os": {
+          "platform": "darwin",
+          "release": "27.0.0",
+          "arch": "arm64"
+        },
+        "browser": {
+          "Browser": "Chrome/142.0.7444.175",
+          "Protocol-Version": "1.3",
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/142.0.0.0 Safari/537.36",
+          "V8-Version": "14.2.231.21",
+          "WebKit-Version": "537.36 (@302067f14a4ea3f42001580e6101fa25ed343445)",
+          "webSocketDebuggerUrl": "ws://127.0.0.1:56161/devtools/browser/3c1b0b1d-8be5-4acb-9781-484d46d9a3fa"
+        },
+        "results": [
+          {
+            "name": "storage:native-areas",
+            "passed": true
+          },
+          {
+            "name": "storage:native-watch",
+            "passed": true
+          },
+          {
+            "name": "storage:journal-recovery",
+            "passed": true
+          },
+          {
+            "name": "background",
+            "passed": true,
+            "info": {
+              "kind": "background",
+              "implementation": "service-worker",
+              "source": "native",
+              "instanceId": "fddad5ae-d078-47e7-8028-deb4a726f222"
+            }
+          },
+          {
+            "name": "isolated",
+            "passed": true,
+            "info": {
+              "kind": "content-script",
+              "world": "ISOLATED",
+              "source": "native"
+            }
+          },
+          {
+            "name": "main-before-registration",
+            "passed": true,
+            "info": {
+              "kind": "unknown",
+              "source": "unknown"
+            }
+          },
+          {
+            "name": "main",
+            "passed": true,
+            "info": {
+              "kind": "content-script",
+              "source": "registered",
+              "world": "MAIN"
+            }
+          },
+          {
+            "name": "extension-tab",
+            "passed": true,
+            "info": {
+              "kind": "extension-page",
+              "source": "native",
+              "tabId": 360996237,
+              "frameId": 0,
+              "windowId": 360996235,
+              "documentId": "7118C09A04CAB0879F4701CB14D884E0",
+              "instanceId": "b7e66237-7804-4dd3-a7b0-eaff7a758f24"
+            }
+          },
+          {
+            "name": "options",
+            "passed": true,
+            "info": {
+              "kind": "options",
+              "source": "registered",
+              "tabId": 360996238,
+              "frameId": 0,
+              "windowId": 360996235,
+              "documentId": "502C8EA1AFBFA09B9F7D49276696CF09",
+              "instanceId": "516e7407-19e2-456d-a8af-f12ed43e6f91"
+            }
+          },
+          {
+            "name": "messaging:background-content",
+            "passed": true
+          },
+          {
+            "name": "messaging:isolated",
+            "passed": true
+          },
+          {
+            "name": "storage:main-policy",
+            "passed": true
+          },
+          {
+            "name": "bridge:main-background",
+            "passed": true
+          },
+          {
+            "name": "storage:context-lock",
+            "passed": true
+          },
+          {
+            "name": "bridge:main-view",
+            "passed": true
+          },
+          {
+            "name": "bridge:main-isolated",
+            "passed": true
+          },
+          {
+            "name": "bridge:background-main",
+            "passed": true
+          },
+          {
+            "name": "bridge:view-main",
+            "passed": true
+          },
+          {
+            "name": "bridge:isolated-main",
+            "passed": true
+          },
+          {
+            "name": "bridge:policy",
+            "passed": true
+          },
+          {
+            "name": "storage:content-rpc",
+            "passed": true
+          },
+          {
+            "name": "storage:main-watch",
+            "passed": true
+          },
+          {
+            "name": "bridge:cleanup",
+            "passed": true
+          },
+          {
+            "name": "messaging:background-view",
+            "passed": true
+          },
+          {
+            "name": "messaging:view",
+            "passed": true
+          },
+          {
+            "name": "popout-before-verify",
+            "passed": true,
+            "info": {
+              "kind": "unknown",
+              "source": "unknown"
+            }
+          },
+          {
+            "name": "popout",
+            "passed": true,
+            "info": {
+              "kind": "popout",
+              "source": "verified-record",
+              "tabId": 360996241,
+              "frameId": 0,
+              "windowId": 360996240,
+              "documentId": "150CE24B1CEAADC9E0B59EFBC636CAB0",
+              "instanceId": "40bdc85e-5a54-4216-9e8d-e0d62e85a1fa",
+              "origin": "sidePanel"
+            }
+          }
+        ],
+        "missing": []
+      },
+      "review": {
+        "timestamp": "2026-10-21T09:03:06.586Z",
+        "os": {
+          "platform": "darwin",
+          "release": "27.0.0",
+          "arch": "arm64"
+        },
+        "browser": {
+          "Browser": "Chrome/142.0.7444.175",
+          "Protocol-Version": "1.3",
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/142.0.0.0 Safari/537.36",
+          "V8-Version": "14.2.231.21",
+          "WebKit-Version": "537.36 (@302067f14a4ea3f42001580e6101fa25ed343445)",
+          "webSocketDebuggerUrl": "ws://127.0.0.1:56185/devtools/browser/7b55b515-ca1c-4259-aaf9-0aff986a2f45"
+        },
+        "results": [
+          {
+            "name": "review:window-move",
+            "passed": true
+          },
+          {
+            "name": "review:large-migration",
+            "passed": true
+          }
+        ],
+        "missing": []
+      },
+      "integration": {
+        "timestamp": "2026-10-21T09:03:09.147Z",
+        "os": {
+          "platform": "darwin",
+          "release": "27.0.0",
+          "arch": "arm64"
+        },
+        "browser": {
+          "Browser": "Chrome/142.0.7444.175",
+          "Protocol-Version": "1.3",
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/142.0.0.0 Safari/537.36",
+          "V8-Version": "14.2.231.21",
+          "WebKit-Version": "537.36 (@302067f14a4ea3f42001580e6101fa25ed343445)",
+          "webSocketDebuggerUrl": "ws://127.0.0.1:56205/devtools/browser/61cc4005-9971-40c3-a392-e407b1384534"
+        },
+        "results": [
+          {
+            "name": "integration:five-modules",
+            "passed": true
+          },
+          {
+            "name": "integration:cross-view-watch",
+            "passed": true
+          },
+          {
+            "name": "integration:cleanup",
+            "passed": true
+          }
+        ],
+        "missing": []
+      },
+      "popout": {
+        "browser": {
+          "Browser": "Chrome/142.0.7444.175",
+          "Protocol-Version": "1.3",
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/142.0.0.0 Safari/537.36",
+          "V8-Version": "14.2.231.21",
+          "WebKit-Version": "537.36 (@302067f14a4ea3f42001580e6101fa25ed343445)",
+          "webSocketDebuggerUrl": "ws://127.0.0.1:56459/devtools/browser/01ba0d02-fb84-4033-b755-c20aac5be572"
+        },
+        "results": [
+          {
+            "name": "popup native discovery, bounds and source configuration",
+            "passed": true
+          },
+          {
+            "name": "same HTML self identity and getCurrent via internal RPC",
+            "passed": true
+          },
+          {
+            "name": "concurrent reuse and explicit duplicate windows",
+            "passed": true
+          },
+          {
+            "name": "sidebar native discovery and independent instance",
+            "passed": true
+          },
+          {
+            "name": "reload restores identity from session",
+            "passed": true
+          },
+          {
+            "name": "fresh manager restores ready and interrupted pending records",
+            "passed": true
+          },
+          {
+            "name": "copied token is rejected in another native tab",
+            "passed": true
+          },
+          {
+            "name": "associated tab movement uses latest window",
+            "passed": true
+          },
+          {
+            "name": "closed association stays fixed, only existence becomes false",
+            "passed": true
+          },
+          {
+            "name": "navigation ends management without closing unrelated page",
+            "passed": true
+          },
+          {
+            "name": "external URL, reserved token and incompatible reuse rejected",
+            "passed": true
+          },
+          {
+            "name": "close cleanup and original UI outcome",
+            "passed": true
+          },
+          {
+            "name": "real Service Worker stop, messaging/storage wake and session restoration",
+            "passed": true
+          }
+        ],
+        "lifecycle": {
+          "versionId": "0",
+          "observedStopped": true,
+          "before": {
+            "windowId": 1980848549,
+            "kind": "popout",
+            "epoch": "ef1714b4-2c4e-4287-9370-83ce2ff061be",
+            "echo": "restart-check:isolated",
+            "stored": "restart-check:isolated"
+          },
+          "after": {
+            "windowId": 1980848549,
+            "kind": "popout",
+            "epoch": "f2d47372-bf0e-4257-bd23-32c794caa9b7",
+            "echo": "restart-check:isolated",
+            "stored": "restart-check:isolated"
+          }
+        }
+      }
+    },
+    "chrome156": {
+      "basic": {
+        "timestamp": "2026-10-21T09:03:14.141Z",
+        "os": {
+          "platform": "darwin",
+          "release": "27.0.0",
+          "arch": "arm64"
+        },
+        "browser": {
+          "Browser": "Chrome/156.0.8078.47",
+          "File-Path-Style": "posix",
+          "Protocol-Version": "1.3",
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+          "V8-Version": "15.6.75.19",
+          "WebKit-Version": "537.36 (@1d17a2e2ee147bb7d6ae2ab6abdb3a2510c17775)",
+          "webSocketDebuggerUrl": "ws://127.0.0.1:56252/devtools/browser/6e6dcfeb-f6da-44c5-b785-488bb86f9e18"
+        },
+        "results": [
+          {
+            "name": "storage:native-areas",
+            "passed": true
+          },
+          {
+            "name": "storage:native-watch",
+            "passed": true
+          },
+          {
+            "name": "storage:journal-recovery",
+            "passed": true
+          },
+          {
+            "name": "background",
+            "passed": true,
+            "info": {
+              "kind": "background",
+              "implementation": "service-worker",
+              "source": "native",
+              "instanceId": "eb86ccb6-9176-4a84-9216-1aefa4bd066c"
+            }
+          },
+          {
+            "name": "isolated",
+            "passed": true,
+            "info": {
+              "kind": "content-script",
+              "world": "ISOLATED",
+              "source": "native"
+            }
+          },
+          {
+            "name": "main-before-registration",
+            "passed": true,
+            "info": {
+              "kind": "unknown",
+              "source": "unknown"
+            }
+          },
+          {
+            "name": "main",
+            "passed": true,
+            "info": {
+              "kind": "content-script",
+              "source": "registered",
+              "world": "MAIN"
+            }
+          },
+          {
+            "name": "extension-tab",
+            "passed": true,
+            "info": {
+              "kind": "extension-page",
+              "source": "native",
+              "tabId": 702196220,
+              "frameId": 0,
+              "windowId": 702196218,
+              "documentId": "7A3227FD756B1D68FEE7E889AB711F28",
+              "instanceId": "38c607c1-0523-4ee2-adb0-45b4f2da15c7"
+            }
+          },
+          {
+            "name": "options",
+            "passed": true,
+            "info": {
+              "kind": "options",
+              "source": "registered",
+              "tabId": 702196221,
+              "frameId": 0,
+              "windowId": 702196218,
+              "documentId": "41B9547446E990CCEF99EF46AD3D915D",
+              "instanceId": "5897720f-61b1-4de9-b00c-63cce5017396"
+            }
+          },
+          {
+            "name": "messaging:background-content",
+            "passed": true
+          },
+          {
+            "name": "messaging:isolated",
+            "passed": true
+          },
+          {
+            "name": "storage:main-policy",
+            "passed": true
+          },
+          {
+            "name": "storage:context-lock",
+            "passed": true
+          },
+          {
+            "name": "bridge:main-background",
+            "passed": true
+          },
+          {
+            "name": "bridge:main-view",
+            "passed": true
+          },
+          {
+            "name": "bridge:main-isolated",
+            "passed": true
+          },
+          {
+            "name": "bridge:background-main",
+            "passed": true
+          },
+          {
+            "name": "bridge:view-main",
+            "passed": true
+          },
+          {
+            "name": "bridge:isolated-main",
+            "passed": true
+          },
+          {
+            "name": "bridge:policy",
+            "passed": true
+          },
+          {
+            "name": "storage:content-rpc",
+            "passed": true
+          },
+          {
+            "name": "storage:main-watch",
+            "passed": true
+          },
+          {
+            "name": "bridge:cleanup",
+            "passed": true
+          },
+          {
+            "name": "messaging:background-view",
+            "passed": true
+          },
+          {
+            "name": "messaging:view",
+            "passed": true
+          },
+          {
+            "name": "popout-before-verify",
+            "passed": true,
+            "info": {
+              "kind": "unknown",
+              "source": "unknown"
+            }
+          },
+          {
+            "name": "popout",
+            "passed": true,
+            "info": {
+              "kind": "popout",
+              "source": "verified-record",
+              "tabId": 702196224,
+              "frameId": 0,
+              "windowId": 702196223,
+              "documentId": "F3DE4425BE92DF1C7EC9C562938E0D68",
+              "instanceId": "11205087-ae53-4903-9e1e-635187450216",
+              "origin": "sidePanel"
+            }
+          }
+        ],
+        "missing": []
+      },
+      "review": {
+        "timestamp": "2026-10-21T09:03:16.052Z",
+        "os": {
+          "platform": "darwin",
+          "release": "27.0.0",
+          "arch": "arm64"
+        },
+        "browser": {
+          "Browser": "Chrome/156.0.8078.47",
+          "File-Path-Style": "posix",
+          "Protocol-Version": "1.3",
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+          "V8-Version": "15.6.75.19",
+          "WebKit-Version": "537.36 (@1d17a2e2ee147bb7d6ae2ab6abdb3a2510c17775)",
+          "webSocketDebuggerUrl": "ws://127.0.0.1:56258/devtools/browser/d07e1bcc-0768-4eda-a792-f4de75f6d840"
+        },
+        "results": [
+          {
+            "name": "review:window-move",
+            "passed": true
+          },
+          {
+            "name": "review:large-migration",
+            "passed": true
+          }
+        ],
+        "missing": []
+      },
+      "integration": {
+        "timestamp": "2026-10-21T09:03:18.021Z",
+        "os": {
+          "platform": "darwin",
+          "release": "27.0.0",
+          "arch": "arm64"
+        },
+        "browser": {
+          "Browser": "Chrome/156.0.8078.47",
+          "File-Path-Style": "posix",
+          "Protocol-Version": "1.3",
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+          "V8-Version": "15.6.75.19",
+          "WebKit-Version": "537.36 (@1d17a2e2ee147bb7d6ae2ab6abdb3a2510c17775)",
+          "webSocketDebuggerUrl": "ws://127.0.0.1:56262/devtools/browser/a790a41d-3165-4255-88fb-f92b0240fb28"
+        },
+        "results": [
+          {
+            "name": "integration:five-modules",
+            "passed": true
+          },
+          {
+            "name": "integration:cross-view-watch",
+            "passed": true
+          },
+          {
+            "name": "integration:cleanup",
+            "passed": true
+          }
+        ],
+        "missing": []
+      },
+      "popout": {
+        "browser": {
+          "Browser": "Chrome/156.0.8078.47",
+          "File-Path-Style": "posix",
+          "Protocol-Version": "1.3",
+          "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+          "V8-Version": "15.6.75.19",
+          "WebKit-Version": "537.36 (@1d17a2e2ee147bb7d6ae2ab6abdb3a2510c17775)",
+          "webSocketDebuggerUrl": "ws://127.0.0.1:56550/devtools/browser/f59e30e0-8397-4468-8654-c2d8b17b9674"
+        },
+        "results": [
+          {
+            "name": "popup native discovery, bounds and source configuration",
+            "passed": true
+          },
+          {
+            "name": "same HTML self identity and getCurrent via internal RPC",
+            "passed": true
+          },
+          {
+            "name": "concurrent reuse and explicit duplicate windows",
+            "passed": true
+          },
+          {
+            "name": "sidebar native discovery and independent instance",
+            "passed": true
+          },
+          {
+            "name": "reload restores identity from session",
+            "passed": true
+          },
+          {
+            "name": "fresh manager restores ready and interrupted pending records",
+            "passed": true
+          },
+          {
+            "name": "copied token is rejected in another native tab",
+            "passed": true
+          },
+          {
+            "name": "associated tab movement uses latest window",
+            "passed": true
+          },
+          {
+            "name": "closed association stays fixed, only existence becomes false",
+            "passed": true
+          },
+          {
+            "name": "navigation ends management without closing unrelated page",
+            "passed": true
+          },
+          {
+            "name": "external URL, reserved token and incompatible reuse rejected",
+            "passed": true
+          },
+          {
+            "name": "close cleanup and original UI outcome",
+            "passed": true
+          },
+          {
+            "name": "real Service Worker stop, messaging/storage wake and session restoration",
+            "passed": true
+          }
+        ],
+        "lifecycle": {
+          "versionId": "2",
+          "observedStopped": true,
+          "before": {
+            "windowId": 186881260,
+            "kind": "popout",
+            "epoch": "154c5ffa-8247-42e5-b0b2-3570c603efe1",
+            "echo": "restart-check:isolated",
+            "stored": "restart-check:isolated"
+          },
+          "after": {
+            "windowId": 186881260,
+            "kind": "popout",
+            "epoch": "3873ad9a-77fa-4374-b789-f2fbbcfc89b1",
+            "echo": "restart-check:isolated",
+            "stored": "restart-check:isolated"
+          }
+        }
+      }
+    },
+    "firefox145": {
+      "basic": {
+        "timestamp": "2026-10-21T09:03:28.738Z",
+        "os": {
+          "platform": "darwin",
+          "release": "27.0.0",
+          "arch": "arm64"
+        },
+        "browser": {
+          "acceptInsecureCerts": false,
+          "browserName": "firefox",
+          "browserVersion": "145.0",
+          "moz:accessibilityChecks": false,
+          "moz:buildID": "20251106194447",
+          "moz:geckodriverVersion": "0.37.1",
+          "moz:headless": true,
+          "moz:platformVersion": "27.0.0",
+          "moz:processID": 27355,
+          "moz:profile": "/private/tmp/webext-utils-profile-c8JXw5",
+          "moz:shutdownTimeout": 60000,
+          "moz:webdriverClick": true,
+          "moz:windowless": false,
+          "pageLoadStrategy": "normal",
+          "platformName": "mac",
+          "proxy": {},
+          "setWindowRect": true,
+          "strictFileInteractability": false,
+          "timeouts": {
+            "implicit": 0,
+            "pageLoad": 300000,
+            "script": 30000
+          },
+          "unhandledPromptBehavior": "dismiss and notify",
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:145.0) Gecko/20100101 Firefox/145.0"
+        },
+        "results": [
+          {
+            "name": "storage:native-areas",
+            "passed": true
+          },
+          {
+            "name": "storage:native-watch",
+            "passed": true
+          },
+          {
+            "name": "storage:journal-recovery",
+            "passed": true
+          },
+          {
+            "name": "background",
+            "passed": true,
+            "info": {
+              "kind": "background",
+              "implementation": "page",
+              "source": "native"
+            }
+          },
+          {
+            "name": "extension-tab",
+            "passed": true,
+            "info": {
+              "kind": "extension-page",
+              "source": "native",
+              "tabId": 2,
+              "frameId": 0,
+              "windowId": 3,
+              "instanceId": "f96a230e-547b-4bbc-b794-d5c0f56c9ce7"
+            }
+          },
+          {
+            "name": "options",
+            "passed": true,
+            "info": {
+              "kind": "options",
+              "source": "registered",
+              "tabId": 3,
+              "frameId": 0,
+              "windowId": 3,
+              "instanceId": "97c36a26-92d2-4645-a784-d6bb7bf5ec66"
+            }
+          },
+          {
+            "name": "isolated",
+            "passed": true,
+            "info": {
+              "kind": "content-script",
+              "world": "ISOLATED",
+              "source": "native"
+            }
+          },
+          {
+            "name": "main-before-registration",
+            "passed": true,
+            "info": {
+              "kind": "unknown",
+              "source": "unknown"
+            }
+          },
+          {
+            "name": "main",
+            "passed": true,
+            "info": {
+              "kind": "content-script",
+              "source": "registered",
+              "world": "MAIN"
+            }
+          },
+          {
+            "name": "messaging:background-content",
+            "passed": true
+          },
+          {
+            "name": "messaging:isolated",
+            "passed": true
+          },
+          {
+            "name": "storage:context-lock",
+            "passed": true
+          },
+          {
+            "name": "storage:main-policy",
+            "passed": true
+          },
+          {
+            "name": "storage:content-rpc",
+            "passed": true
+          },
+          {
+            "name": "storage:main-watch",
+            "passed": true
+          },
+          {
+            "name": "bridge:main-background",
+            "passed": true
+          },
+          {
+            "name": "bridge:main-view",
+            "passed": true
+          },
+          {
+            "name": "bridge:main-isolated",
+            "passed": true
+          },
+          {
+            "name": "bridge:background-main",
+            "passed": true
+          },
+          {
+            "name": "bridge:view-main",
+            "passed": true
+          },
+          {
+            "name": "bridge:isolated-main",
+            "passed": true
+          },
+          {
+            "name": "bridge:policy",
+            "passed": true
+          },
+          {
+            "name": "bridge:cleanup",
+            "passed": true
+          },
+          {
+            "name": "messaging:background-view",
+            "passed": true
+          },
+          {
+            "name": "messaging:view",
+            "passed": true
+          },
+          {
+            "name": "popout-before-verify",
+            "passed": true,
+            "info": {
+              "kind": "unknown",
+              "source": "unknown"
+            }
+          },
+          {
+            "name": "popout",
+            "passed": true,
+            "info": {
+              "kind": "popout",
+              "source": "verified-record",
+              "tabId": 5,
+              "frameId": 0,
+              "windowId": 36,
+              "instanceId": "3ed9efce-f35f-442c-91d2-fa7c06a7134c",
+              "origin": "sidePanel"
+            }
+          }
+        ],
+        "missing": []
+      },
+      "review": {
+        "timestamp": "2026-10-21T09:03:31.056Z",
+        "os": {
+          "platform": "darwin",
+          "release": "27.0.0",
+          "arch": "arm64"
+        },
+        "browser": {
+          "acceptInsecureCerts": false,
+          "browserName": "firefox",
+          "browserVersion": "145.0",
+          "moz:accessibilityChecks": false,
+          "moz:buildID": "20251106194447",
+          "moz:geckodriverVersion": "0.37.1",
+          "moz:headless": true,
+          "moz:platformVersion": "27.0.0",
+          "moz:processID": 27426,
+          "moz:profile": "/private/tmp/webext-utils-profile-lt6yjH",
+          "moz:shutdownTimeout": 60000,
+          "moz:webdriverClick": true,
+          "moz:windowless": false,
+          "pageLoadStrategy": "normal",
+          "platformName": "mac",
+          "proxy": {},
+          "setWindowRect": true,
+          "strictFileInteractability": false,
+          "timeouts": {
+            "implicit": 0,
+            "pageLoad": 300000,
+            "script": 30000
+          },
+          "unhandledPromptBehavior": "dismiss and notify",
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:145.0) Gecko/20100101 Firefox/145.0"
+        },
+        "results": [
+          {
+            "name": "review:window-move",
+            "passed": true
+          },
+          {
+            "name": "review:large-migration",
+            "passed": true
+          }
+        ],
+        "missing": []
+      },
+      "integration": {
+        "timestamp": "2026-10-21T09:03:33.627Z",
+        "os": {
+          "platform": "darwin",
+          "release": "27.0.0",
+          "arch": "arm64"
+        },
+        "browser": {
+          "acceptInsecureCerts": false,
+          "browserName": "firefox",
+          "browserVersion": "145.0",
+          "moz:accessibilityChecks": false,
+          "moz:buildID": "20251106194447",
+          "moz:geckodriverVersion": "0.37.1",
+          "moz:headless": true,
+          "moz:platformVersion": "27.0.0",
+          "moz:processID": 27460,
+          "moz:profile": "/private/tmp/webext-utils-profile-ZDwZIE",
+          "moz:shutdownTimeout": 60000,
+          "moz:webdriverClick": true,
+          "moz:windowless": false,
+          "pageLoadStrategy": "normal",
+          "platformName": "mac",
+          "proxy": {},
+          "setWindowRect": true,
+          "strictFileInteractability": false,
+          "timeouts": {
+            "implicit": 0,
+            "pageLoad": 300000,
+            "script": 30000
+          },
+          "unhandledPromptBehavior": "dismiss and notify",
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:145.0) Gecko/20100101 Firefox/145.0"
+        },
+        "results": [
+          {
+            "name": "integration:five-modules",
+            "passed": true
+          },
+          {
+            "name": "integration:cross-view-watch",
+            "passed": true
+          },
+          {
+            "name": "integration:cleanup",
+            "passed": true
+          }
+        ],
+        "missing": []
+      },
+      "popout": {
+        "browser": {
+          "name": "firefox",
+          "version": "145.0",
+          "driver": "0.37.1",
+          "headless": true,
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:145.0) Gecko/20100101 Firefox/145.0"
+        },
+        "results": [
+          {
+            "name": "popup native discovery, bounds and source configuration",
+            "passed": true
+          },
+          {
+            "name": "same HTML self identity and getCurrent via internal RPC",
+            "passed": true
+          },
+          {
+            "name": "concurrent reuse and explicit duplicate windows",
+            "passed": true
+          },
+          {
+            "name": "sidebar native discovery and independent instance",
+            "passed": true
+          },
+          {
+            "name": "reload restores identity from session",
+            "passed": true
+          },
+          {
+            "name": "fresh manager restores ready and interrupted pending records",
+            "passed": true
+          },
+          {
+            "name": "copied token is rejected in another native tab",
+            "passed": true
+          },
+          {
+            "name": "associated tab movement uses latest window",
+            "passed": true
+          },
+          {
+            "name": "closed association stays fixed, only existence becomes false",
+            "passed": true
+          },
+          {
+            "name": "navigation ends management without closing unrelated page",
+            "passed": true
+          },
+          {
+            "name": "external URL, reserved token and incompatible reuse rejected",
+            "passed": true
+          },
+          {
+            "name": "close cleanup and original UI outcome",
+            "passed": true
+          }
+        ]
+      }
+    },
+    "firefox158": {
+      "basic": {
+        "timestamp": "2026-10-21T09:03:39.631Z",
+        "os": {
+          "platform": "darwin",
+          "release": "27.0.0",
+          "arch": "arm64"
+        },
+        "browser": {
+          "acceptInsecureCerts": false,
+          "browserName": "firefox",
+          "browserVersion": "158.0.1",
+          "moz:accessibilityChecks": false,
+          "moz:buildID": "20261019185856",
+          "moz:geckodriverVersion": "0.37.1",
+          "moz:headless": true,
+          "moz:platformVersion": "27.0.0",
+          "moz:processID": 27512,
+          "moz:profile": "/private/tmp/webext-utils-profile-UOKtxA",
+          "moz:shutdownTimeout": 60000,
+          "moz:webdriverClick": true,
+          "moz:windowless": false,
+          "pageLoadStrategy": "normal",
+          "platformName": "mac",
+          "proxy": {},
+          "setWindowRect": true,
+          "strictFileInteractability": false,
+          "timeouts": {
+            "implicit": 0,
+            "pageLoad": 300000,
+            "script": 30000
+          },
+          "unhandledPromptBehavior": "dismiss and notify",
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:158.0) Gecko/20100101 Firefox/158.0"
+        },
+        "results": [
+          {
+            "name": "storage:native-areas",
+            "passed": true
+          },
+          {
+            "name": "storage:native-watch",
+            "passed": true
+          },
+          {
+            "name": "storage:journal-recovery",
+            "passed": true
+          },
+          {
+            "name": "background",
+            "passed": true,
+            "info": {
+              "kind": "background",
+              "implementation": "page",
+              "source": "native"
+            }
+          },
+          {
+            "name": "extension-tab",
+            "passed": true,
+            "info": {
+              "kind": "extension-page",
+              "source": "native",
+              "tabId": 2,
+              "frameId": 0,
+              "windowId": 3,
+              "documentId": "9af1b1d6-3acc-6344-03cc-3c00bef8ba00",
+              "instanceId": "86806ffd-0041-43a8-b772-943f78d3751d"
+            }
+          },
+          {
+            "name": "options",
+            "passed": true,
+            "info": {
+              "kind": "options",
+              "source": "registered",
+              "tabId": 3,
+              "frameId": 0,
+              "windowId": 3,
+              "documentId": "23249596-e431-181b-8bbc-c176d871509c",
+              "instanceId": "cc52a171-0b1d-41df-8ea3-8c7461a11277"
+            }
+          },
+          {
+            "name": "isolated",
+            "passed": true,
+            "info": {
+              "kind": "content-script",
+              "world": "ISOLATED",
+              "source": "native"
+            }
+          },
+          {
+            "name": "main-before-registration",
+            "passed": true,
+            "info": {
+              "kind": "unknown",
+              "source": "unknown"
+            }
+          },
+          {
+            "name": "main",
+            "passed": true,
+            "info": {
+              "kind": "content-script",
+              "source": "registered",
+              "world": "MAIN"
+            }
+          },
+          {
+            "name": "messaging:background-content",
+            "passed": true
+          },
+          {
+            "name": "messaging:isolated",
+            "passed": true
+          },
+          {
+            "name": "storage:context-lock",
+            "passed": true
+          },
+          {
+            "name": "storage:main-policy",
+            "passed": true
+          },
+          {
+            "name": "storage:content-rpc",
+            "passed": true
+          },
+          {
+            "name": "storage:main-watch",
+            "passed": true
+          },
+          {
+            "name": "bridge:main-background",
+            "passed": true
+          },
+          {
+            "name": "bridge:main-view",
+            "passed": true
+          },
+          {
+            "name": "bridge:main-isolated",
+            "passed": true
+          },
+          {
+            "name": "bridge:background-main",
+            "passed": true
+          },
+          {
+            "name": "bridge:view-main",
+            "passed": true
+          },
+          {
+            "name": "bridge:policy",
+            "passed": true
+          },
+          {
+            "name": "bridge:isolated-main",
+            "passed": true
+          },
+          {
+            "name": "bridge:cleanup",
+            "passed": true
+          },
+          {
+            "name": "messaging:background-view",
+            "passed": true
+          },
+          {
+            "name": "messaging:view",
+            "passed": true
+          },
+          {
+            "name": "popout-before-verify",
+            "passed": true,
+            "info": {
+              "kind": "unknown",
+              "source": "unknown"
+            }
+          },
+          {
+            "name": "popout",
+            "passed": true,
+            "info": {
+              "kind": "popout",
+              "source": "verified-record",
+              "tabId": 5,
+              "frameId": 0,
+              "windowId": 37,
+              "documentId": "b7901867-9bf8-bfee-1aeb-5194c706081e",
+              "instanceId": "d73c28bd-d9b8-4bd4-b992-6901d2b7c7ac",
+              "origin": "sidePanel"
+            }
+          }
+        ],
+        "missing": []
+      },
+      "review": {
+        "timestamp": "2026-10-21T09:03:41.706Z",
+        "os": {
+          "platform": "darwin",
+          "release": "27.0.0",
+          "arch": "arm64"
+        },
+        "browser": {
+          "acceptInsecureCerts": false,
+          "browserName": "firefox",
+          "browserVersion": "158.0.1",
+          "moz:accessibilityChecks": false,
+          "moz:buildID": "20261019185856",
+          "moz:geckodriverVersion": "0.37.1",
+          "moz:headless": true,
+          "moz:platformVersion": "27.0.0",
+          "moz:processID": 27532,
+          "moz:profile": "/private/tmp/webext-utils-profile-qirVV9",
+          "moz:shutdownTimeout": 60000,
+          "moz:webdriverClick": true,
+          "moz:windowless": false,
+          "pageLoadStrategy": "normal",
+          "platformName": "mac",
+          "proxy": {},
+          "setWindowRect": true,
+          "strictFileInteractability": false,
+          "timeouts": {
+            "implicit": 0,
+            "pageLoad": 300000,
+            "script": 30000
+          },
+          "unhandledPromptBehavior": "dismiss and notify",
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:158.0) Gecko/20100101 Firefox/158.0"
+        },
+        "results": [
+          {
+            "name": "review:window-move",
+            "passed": true
+          },
+          {
+            "name": "review:large-migration",
+            "passed": true
+          }
+        ],
+        "missing": []
+      },
+      "integration": {
+        "timestamp": "2026-10-21T09:03:44.210Z",
+        "os": {
+          "platform": "darwin",
+          "release": "27.0.0",
+          "arch": "arm64"
+        },
+        "browser": {
+          "acceptInsecureCerts": false,
+          "browserName": "firefox",
+          "browserVersion": "158.0.1",
+          "moz:accessibilityChecks": false,
+          "moz:buildID": "20261019185856",
+          "moz:geckodriverVersion": "0.37.1",
+          "moz:headless": true,
+          "moz:platformVersion": "27.0.0",
+          "moz:processID": 27556,
+          "moz:profile": "/private/tmp/webext-utils-profile-oCl79F",
+          "moz:shutdownTimeout": 60000,
+          "moz:webdriverClick": true,
+          "moz:windowless": false,
+          "pageLoadStrategy": "normal",
+          "platformName": "mac",
+          "proxy": {},
+          "setWindowRect": true,
+          "strictFileInteractability": false,
+          "timeouts": {
+            "implicit": 0,
+            "pageLoad": 300000,
+            "script": 30000
+          },
+          "unhandledPromptBehavior": "dismiss and notify",
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:158.0) Gecko/20100101 Firefox/158.0"
+        },
+        "results": [
+          {
+            "name": "integration:five-modules",
+            "passed": true
+          },
+          {
+            "name": "integration:cross-view-watch",
+            "passed": true
+          },
+          {
+            "name": "integration:cleanup",
+            "passed": true
+          }
+        ],
+        "missing": []
+      },
+      "popout": {
+        "browser": {
+          "name": "firefox",
+          "version": "158.0.1",
+          "driver": "0.37.1",
+          "headless": true,
+          "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10.15; rv:158.0) Gecko/20100101 Firefox/158.0"
+        },
+        "results": [
+          {
+            "name": "popup native discovery, bounds and source configuration",
+            "passed": true
+          },
+          {
+            "name": "same HTML self identity and getCurrent via internal RPC",
+            "passed": true
+          },
+          {
+            "name": "concurrent reuse and explicit duplicate windows",
+            "passed": true
+          },
+          {
+            "name": "sidebar native discovery and independent instance",
+            "passed": true
+          },
+          {
+            "name": "reload restores identity from session",
+            "passed": true
+          },
+          {
+            "name": "fresh manager restores ready and interrupted pending records",
+            "passed": true
+          },
+          {
+            "name": "copied token is rejected in another native tab",
+            "passed": true
+          },
+          {
+            "name": "associated tab movement uses latest window",
+            "passed": true
+          },
+          {
+            "name": "closed association stays fixed, only existence becomes false",
+            "passed": true
+          },
+          {
+            "name": "navigation ends management without closing unrelated page",
+            "passed": true
+          },
+          {
+            "name": "external URL, reserved token and incompatible reuse rejected",
+            "passed": true
+          },
+          {
+            "name": "close cleanup and original UI outcome",
+            "passed": true
+          }
+        ]
+      }
+    }
+  },
+  "runnerIncident": {
+    "browser": "Chrome156",
+    "stage": "pre-test startup during report re-run",
+    "failure": "Empty DevToolsActivePort first line produced ECONNREFUSED before fixture execution",
+    "fix": "Wait for a nonempty positive decimal port",
+    "retry": "13/13 passed including real SW stop; raw successful report included"
+  },
+  "releaseAssessment": "R1-R6 blockers resolved; conditional initial release candidate with the documented breaking type change and unverified scope excluded from guarantees.",
+  "unverified": [
+    "Firefox real event-page unload",
+    "Real Content Script navigation/BFCache and 1024-navigation cleanup endurance",
+    "Actual forced stop during popout pending creation",
+    "normal/private storage and Web Locks sharing",
+    "physical device sync",
+    "Windows/Linux and all intermediate browser versions",
+    "all 64 native context routes",
+    "sidePanel gesture detail suite was not rerun",
+    "dynamic disk quota/unlimitedStorage physical exhaustion and native write-rate limits"
+  ],
+  "externalActions": {
+    "packagePublished": false,
+    "pushed": false,
+    "releaseCreated": false
+  }
+}
