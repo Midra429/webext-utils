@@ -52,7 +52,10 @@ async function report(name: string, run: () => Promise<void>) {
 async function expectOpen(count: number) {
   await until(() => opened.length > count, 'opened event')
   assert(opened.at(-1)?.windowId === windowId, 'Opened event window')
-  assert(opened.at(-1)?.page === url('panel.html?global#route'), 'Event page')
+  assert(
+    opened.at(-1)?.page === url('panel.html?global#route'),
+    'Event page keeps the query and hash'
+  )
   assert(await panel.isOpen(), 'isOpen() after open')
   assert(await panel.isOpen({ windowId }), 'isOpen({ windowId }) after open')
 }

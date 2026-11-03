@@ -83,6 +83,7 @@ try {
     entrypoints: [
       join(root, 'tests/browser/side-panel.ts'),
       join(root, 'tests/browser/side-panel-page.ts'),
+      join(root, 'tests/browser/side-panel-background.ts'),
     ],
     outdir: temp,
     target: 'browser',
@@ -97,10 +98,6 @@ try {
   await writeFile(
     join(temp, 'panel.html'),
     '<!doctype html><title>Panel fixture</title><p>Native side panel</p><script src="side-panel-page.js"></script>'
-  )
-  await writeFile(
-    join(temp, 'background.js'),
-    `const api = globalThis.browser ?? chrome; api.tabs.create({url:api.runtime.getURL('test.html')})`
   )
   await writeFile(
     join(temp, 'manifest.json'),
@@ -119,7 +116,7 @@ try {
                 strict_min_version: '145.0',
               },
             },
-            background: { scripts: ['background.js'] },
+            background: { scripts: ['side-panel-background.js'] },
             sidebar_action: {
               default_panel: 'panel.html',
               default_title: 'Fixture',
@@ -128,7 +125,7 @@ try {
           }
         : {
             minimum_chrome_version: '142',
-            background: { service_worker: 'background.js' },
+            background: { service_worker: 'side-panel-background.js' },
             side_panel: { default_path: 'panel.html' },
           }),
     })
@@ -265,6 +262,8 @@ user_pref("browser.aboutwelcome.enabled", false);
         '--no-first-run',
         '--no-default-browser-check',
         `--load-extension=${temp}`,
+        // Extra flags, e.g. CHROME_FLAGS='--no-sandbox' when running as root.
+        ...(process.env.CHROME_FLAGS?.split(' ').filter(Boolean) ?? []),
         'about:blank',
       ],
       { stdout: 'inherit', stderr: 'inherit' }

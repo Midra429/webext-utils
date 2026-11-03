@@ -13,7 +13,7 @@ const root = resolve(import.meta.dir, '..')
 const markdownLink = /\]\(([^)]+)\)/g
 const externalLink = /^(?:[a-z]+:|#)/i
 const packedPath =
-  /^(dist\/.*\.(?:js|d\.ts)$|docs\/(?:api|compatibility|context|integration|main-world|messaging|migrations|popout|side-panel|storage|testing)\.md$|examples\/(?:[^/]+\.(?:ts|html|json)|README\.md)$|package\.json$|README\.md$|LICENSE$)/
+  /^(dist\/.*\.(?:js|d\.ts)$|docs\/(?:browser-differences|context|errors|getting-started|main-world|messaging|popout|side-panel|storage)\.md$|examples\/(?:[^/]+\.(?:ts|html|json)|README\.md)$|package\.json$|README\.md$|LICENSE$)/
 const temp = await mkdtemp(join(tmpdir(), 'webext-utils-consumer-'))
 
 async function run(

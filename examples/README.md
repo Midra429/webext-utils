@@ -1,8 +1,19 @@
-# MV3の利用例
+# 利用例
 
-Background / 共通UI / ISOLATED / MAINのTypeScript例です。root exportからビルド済みパッケージをimportします。ChromeとFirefoxで同じ `ui.html` をpopup・side panel・popoutに再利用します。
+Chrome と Firefox に読み込める拡張機能の例です。同じ `ui.html` をポップアップ・サイドパネル・popout で使います。
 
-リポジトリで実行:
+| ファイル | 内容 |
+| --- | --- |
+| [background.ts](background.ts) | Background の初期化、受信ハンドラー、データの移行、サイドパネルの開閉通知 |
+| [ui.ts](ui.ts) / [ui.html](ui.html) | ポップアップ・サイドパネル・popout 共通の UI |
+| [isolated.ts](isolated.ts) | ISOLATED world: MAIN world へのブリッジとストレージの公開 |
+| [main.ts](main.ts) | MAIN world: 公開されたメッセージとストレージを使う |
+| [shared.ts](shared.ts) | メッセージとストレージの型 |
+| [manifest.chrome.json](manifest.chrome.json) / [manifest.firefox.json](manifest.firefox.json) | ブラウザごとの Manifest |
+
+## 動かす
+
+リポジトリで次を実行します。
 
 ```sh
 bun install
@@ -10,10 +21,11 @@ bun run build
 bun run build:example
 ```
 
-Chromeは `examples/dist/chrome` を開発者モードの「パッケージ化されていない拡張機能を読み込む」で、Firefoxは `examples/dist/firefox/manifest.json` をabout:debuggingの「一時的なアドオンを読み込む」で選びます。通常の拡張機能インストールやストア公開は行いません。
+- Chrome: `chrome://extensions` でデベロッパーモードを有効にし、「パッケージ化されていない拡張機能を読み込む」で `examples/dist/chrome` を選びます。
+- Firefox: `about:debugging` の「一時的なアドオンを読み込む」で `examples/dist/firefox/manifest.json` を選びます。
 
-actionを開くと、theme変更・panel表示・popout作成を実行できます。`https://example.com` を開くと、MAINが公開されたthemeを読み出します。この例のMAIN公開はread/watchだけです。ブラウザのnative gesture制限は [互換性](../docs/compatibility.md) を参照してください。
+ツールバーのアイコンからポップアップを開くと、テーマの変更・サイドパネルの開閉・popout の作成を試せます。`https://example.com` を開くと、MAIN world が公開されたテーマを読み込みます（この例の公開は読み込みと監視だけです）。
 
-例のpopoutは既定でtabを関連付けません。関連tabのtitleを読む場合は、`ui.ts` のopenに利用側で取得した `associatedTabId` を追加します。対応するページにISOLATEDが注入されている必要があります。既存の同じreuseKeyのwindowを閉じてから試してください。
+popout は既定ではタブを関連付けません。関連タブのタイトルを読むには、`ui.ts` の `webextPopout.open()` に `associatedTabId` を追加してください。
 
-ソース例はtypecheckと、梱包パッケージの生成宣言に対する別consumerの型検査を通します。自動統合fixtureは `tests/browser/integration.ts` です（testsは配布物に含みません）。全操作の説明は [統合ガイド](../docs/integration.md) と [API索引](../docs/api.md) にあります。
+詳しくは [はじめに](../docs/getting-started.md) を参照してください。

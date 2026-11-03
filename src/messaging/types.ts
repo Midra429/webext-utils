@@ -57,7 +57,11 @@ export interface ContentScriptTarget {
   context: 'content-script'
   /** 宛先のタブ ID です。 */
   tabId: number
-  /** 宛先のワールドです。@default 'ISOLATED' */
+  /**
+   * 宛先のワールドです。
+   *
+   * @default 'ISOLATED'
+   */
   world?: 'ISOLATED' | 'MAIN'
   /** 宛先のフレーム ID です。`send` / `notify` では既定で `0` です。 */
   frameId?: number
@@ -126,9 +130,17 @@ export interface MessageSender {
 
 /** `send` / `notify` のオプションです。 */
 export interface SendOptions {
-  /** 宛先です。@default { context: 'background' } */
+  /**
+   * 宛先です。
+   *
+   * @default { context: 'background' }
+   */
   target?: MessageTarget
-  /** 応答を待つ時間（ミリ秒）です。@default 10000 */
+  /**
+   * 応答を待つ時間（ミリ秒）です。
+   *
+   * @default 10000
+   */
   timeoutMs?: number
   /**
    * `true` にすると、受信側がない場合（`NO_RECEIVER`）に例外を投げず `{ delivered: false }` を返します。
@@ -315,13 +327,29 @@ export interface PageBridge {
 
 /** ブリッジの資源上限です。いずれも 1 以上の整数です。 */
 export interface PageBridgeLimits {
-  /** 1メッセージの最大バイト数（UTF-8）です。@default 65536 */
+  /**
+   * 1メッセージの最大バイト数（UTF-8）です。
+   *
+   * @default 65536
+   */
   maxBytes?: number
-  /** JSON の最大の深さです（最大 64）。@default 32 */
+  /**
+   * JSON の最大の深さです（最大 64）。
+   *
+   * @default 32
+   */
   maxDepth?: number
-  /** 同時に処理中にできる要求数です。@default 32 */
+  /**
+   * 同時に処理中にできる要求数です。
+   *
+   * @default 32
+   */
   maxPending?: number
-  /** 1分あたりの最大要求数です。@default 60 */
+  /**
+   * 1分あたりの最大要求数です。
+   *
+   * @default 60
+   */
   requestsPerMinute?: number
 }
 

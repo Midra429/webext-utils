@@ -51,19 +51,58 @@ function fixture(kind: Kind, options: { focused?: number } = {}) {
   const nativeClosed = event()
   const sent: unknown[] = []
   const window = new EventTarget()
+  const onConnect = event()
+  const ports: { disconnect(): void }[] = []
+  /** A Port pair: the caller gets one end, onConnect listeners the other. */
+  function connect({ name }: { name: string }) {
+    const side = () => {
+      const message = event()
+      const disconnect = event()
+      return { message, disconnect, connected: true }
+    }
+    const a = side(),
+      b = side()
+    const end = (self: typeof a, other: typeof a, sender?: unknown) => ({
+      name,
+      sender,
+      onMessage: self.message.api,
+      onDisconnect: self.disconnect.api,
+      postMessage(value: unknown) {
+        if (other.connected) queueMicrotask(() => other.message.emit(value))
+      },
+      disconnect() {
+        if (!self.connected) return
+        self.connected = other.connected = false
+        queueMicrotask(() => other.disconnect.emit())
+      },
+    })
+    const receiver = end(b, a, { id: 'self', url: `${root}panel.html` })
+    ports.push(receiver)
+    onConnect.emit(receiver)
+    return end(a, b)
+  }
   const runtime = {
     id: 'self',
     getURL: (path: string) => root + path,
     getManifest: () => manifest,
-    sendMessage: async (message: unknown) => {
+    sendMessage: async (message: { type?: string; windowId?: number }) => {
+      // Models a panel page that called registerPanel() in each open window.
+      if (message.type === 'query')
+        return message.windowId !== undefined && open.has(message.windowId)
+      if (message.type === 'probe') return
       sent.push(message)
     },
     onMessage: onMessage.api,
+    onConnect: onConnect.api,
+    connect,
     getContexts: async (filter: { windowIds?: number[] }) => {
       calls.push(`getContexts:${JSON.stringify(filter)}`)
-      return [...open]
-        .filter((id) => !filter.windowIds || filter.windowIds.includes(id))
-        .map((windowId) => ({ contextType: 'SIDE_PANEL', windowId }))
+      return (
+        [...open]
+          .filter((id) => !filter.windowIds || filter.windowIds.includes(id))
+          // Chrome reports side panel contexts without their window.
+          .map(() => ({ contextType: 'SIDE_PANEL', windowId: -1 }))
+      )
     },
   }
   const windows = {
@@ -79,12 +118,13 @@ function fixture(kind: Kind, options: { focused?: number } = {}) {
       calls.push(`open:${windowId}`)
       if (!open.has(windowId)) {
         open.add(windowId)
-        nativeOpened.emit({ windowId, path: page })
+        nativeOpened.emit({ windowId, path: page || 'panel.html' })
       }
     },
     close: async ({ windowId }: { windowId: number }) => {
       calls.push(`close:${windowId}`)
-      if (open.delete(windowId)) nativeClosed.emit({ windowId, path: page })
+      if (open.delete(windowId))
+        nativeClosed.emit({ windowId, path: page || 'panel.html' })
     },
     setOptions: async (value: { path: string; enabled: boolean }) => {
       calls.push(`setOptions:${JSON.stringify(value)}`)
@@ -134,6 +174,7 @@ function fixture(kind: Kind, options: { focused?: number } = {}) {
     window,
     onMessage,
     onClicked,
+    ports,
     /** Turns this realm into the extension page at `path`. */
     page(path: string) {
       global('location', { href: root + path })
@@ -149,6 +190,7 @@ function fixture(kind: Kind, options: { focused?: number } = {}) {
 }
 
 const kinds: Kind[] = ['chrome', 'firefox']
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
 
 describe.each(kinds)('%s', (kind) => {
   test('open / close / toggle / isOpen behave the same', async () => {
@@ -224,9 +266,10 @@ describe.each(kinds)('%s', (kind) => {
     })
   })
 
-  test('registerPanel announces opened and closed to every listener', async () => {
+  test('the Background publishes opened and closed to every listener', async () => {
     const f = fixture(kind)
-    f.page('panel.html')
+    f.background()
+    const stopBackground = panel.startBackground()
     const events: string[] = []
     const stopOpened = panel.onOpened((e) =>
       events.push(`opened:${e.windowId}:${e.page}`)
@@ -234,32 +277,30 @@ describe.each(kinds)('%s', (kind) => {
     const stopClosed = panel.onClosed((e) =>
       events.push(`closed:${e.windowId}:${e.page}`)
     )
+    // The user opens the panel and the panel page loads.
+    await panel.open({ windowId: 9 })
+    f.page('panel.html') // this realm now plays the panel page as well
     const registration = panel.registerPanel()
     expect(() => panel.registerPanel()).toThrow()
     await registration.ready
+    await tick()
+    expect(await panel.isOpen({ windowId: 9 })).toBe(true)
+    // The user closes the panel and its document is destroyed.
+    await panel.close({ windowId: 9 })
     f.window.dispatchEvent(new Event('pagehide'))
+    await tick()
     const page = `${f.root}panel.html`
     expect(events).toEqual([`opened:9:${page}`, `closed:9:${page}`])
+    const message = { protocol: '@midra/webext-utils/side-panel', version: 1 }
     expect(f.sent).toEqual([
-      {
-        protocol: '@midra/webext-utils/side-panel',
-        version: 1,
-        type: 'opened',
-        windowId: 9,
-        page,
-      },
-      {
-        protocol: '@midra/webext-utils/side-panel',
-        version: 1,
-        type: 'closed',
-        windowId: 9,
-        page,
-      },
+      { ...message, type: 'opened', windowId: 9, page },
+      { ...message, type: 'closed', windowId: 9, page },
     ])
     // The registration was released by pagehide.
     panel.registerPanel()()
     stopOpened()
     stopClosed()
+    stopBackground()
     expect(f.onMessage.listeners.size).toBe(0)
   })
 
@@ -326,6 +367,71 @@ describe.each(kinds)('%s', (kind) => {
     expect(() => panel.startBackground()).toThrow(
       expect.objectContaining({ code: 'CONTEXT_UNAVAILABLE' })
     )
+  })
+})
+
+describe('chrome', () => {
+  test('isOpen asks registered panels because Chrome contexts have no window', async () => {
+    const f = fixture('chrome')
+    await panel.open({ windowId: 9 })
+    // No panel page answered: the window cannot be confirmed.
+    f.api.runtime.sendMessage = async () => {
+      throw new Error(
+        'Could not establish connection. Receiving end does not exist.'
+      )
+    }
+    expect(await panel.isOpen({ windowId: 9 })).toBe(false)
+    // Inside the registered panel itself, no message is needed.
+    f.page('panel.html')
+    const registration = panel.registerPanel()
+    await registration.ready
+    expect(await panel.isOpen({ windowId: 9 })).toBe(true)
+    registration()
+  })
+})
+
+describe('firefox', () => {
+  test('a panel reconnects to a restarted Background without a second opened event', async () => {
+    const f = fixture('firefox')
+    f.background()
+    let stopBackground = panel.startBackground()
+    const events: string[] = []
+    const stops = [
+      panel.onOpened((e) => events.push(`opened:${e.windowId}`)),
+      panel.onClosed((e) => events.push(`closed:${e.windowId}`)),
+    ]
+    await panel.open()
+    f.page('panel.html')
+    const registration = panel.registerPanel()
+    await registration.ready
+    await tick()
+    // The event page unloads: its Port end disconnects after a while.
+    stopBackground()
+    stopBackground = panel.startBackground()
+    const now = Date.now
+    Date.now = () => now() + 5000
+    try {
+      f.ports.at(-1)?.disconnect()
+      await tick()
+    } finally {
+      Date.now = now
+    }
+    expect(f.ports).toHaveLength(2)
+    // The panel closes: the restarted Background still publishes it once.
+    f.window.dispatchEvent(new Event('pagehide'))
+    await tick()
+    expect(events).toEqual(['opened:9', 'closed:9'])
+    // A Port that disconnects immediately (nothing listens) is not retried.
+    f.page('panel.html')
+    const again = panel.registerPanel()
+    await again.ready
+    const count = f.ports.length
+    f.ports.at(-1)?.disconnect()
+    await tick()
+    expect(f.ports).toHaveLength(count)
+    again()
+    for (const stop of stops) stop()
+    stopBackground()
   })
 })
 

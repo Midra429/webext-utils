@@ -88,7 +88,11 @@ export type StorageValidators<S> = {
 
 /** `webextStorage()` のオプションです。 */
 export interface StorageOptions<S> {
-  /** 保存先の領域です。@default 'local' */
+  /**
+   * 保存先の領域です。
+   *
+   * @default 'local'
+   */
   area?: StorageArea
   /**
    * MAIN world で使う場合に、ISOLATED world が設置したブリッジのチャネルを指定します。

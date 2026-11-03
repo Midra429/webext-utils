@@ -275,10 +275,16 @@ async function resolve(): Promise<ContextInfo> {
           // getCurrent identifies a tab, not an embedded frame. Without a
           // native self documentId, an iframe must not borrow its parent's ID.
           if (property(env.window, 'top') !== env.window) return false
+          // Chrome reports side panels with windowId -1. They are never in a
+          // tab, so only a page without its own tab can match them.
+          const sidePanelWithoutWindow =
+            c.contextType === 'SIDE_PANEL' &&
+            c.windowId === -1 &&
+            tabId === undefined
           if (
             c.documentUrl !== env.href ||
             windowId === undefined ||
-            c.windowId !== windowId
+            (c.windowId !== windowId && !sidePanelWithoutWindow)
           )
             return false
           if (tabId !== undefined && c.tabId !== tabId) return false
@@ -295,6 +301,14 @@ async function resolve(): Promise<ContextInfo> {
         const kind = kindOf(self, env)
         if (kind && kind !== 'popout' && kind !== 'content-script')
           info = { kind, ...metadata(self) }
+      } else if (
+        info.kind === 'unknown' &&
+        candidates.length > 1 &&
+        candidates.every((c) => c.contextType === 'SIDE_PANEL')
+      ) {
+        // The same panel page is open in several windows. The role is certain,
+        // but no single native identity belongs to this document.
+        info = { kind: 'side-panel', source: 'native' }
       }
       // getCurrent describes this page, never the active/associated tab.
       info = {

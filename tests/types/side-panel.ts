@@ -35,7 +35,10 @@ registration()
 
 const stopBackground: Unsubscribe = webextSidePanel.startBackground({
   openOnActionClick: true,
-  onError: (error) => console.error(error.code),
+  onError: (error) => {
+    const code: string = error.code
+    void code
+  },
 })
 stopBackground()
 

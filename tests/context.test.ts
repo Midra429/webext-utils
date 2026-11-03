@@ -216,6 +216,26 @@ describe('resolve identity and cache', () => {
     })
     expect(webextContext.get().kind).toBe('side-panel')
   })
+  test('Chrome side panels without a window are resolved', async () => {
+    const { api } = page()
+    api.runtime.getContexts = async () => [
+      context('SIDE_PANEL', { windowId: -1, tabId: -1 }),
+    ]
+    expect(await webextContext.resolve()).toMatchObject({
+      kind: 'side-panel',
+      instanceId: 'instance',
+      windowId: 5,
+    })
+    // The same page open in several windows keeps the role without an identity.
+    api.runtime.getContexts = async () => [
+      context('SIDE_PANEL', { windowId: -1, tabId: -1 }),
+      context('SIDE_PANEL', { windowId: -1, tabId: -1, contextId: 'other' }),
+    ]
+    const info = await webextContext.resolve()
+    expect(info.kind).toBe('side-panel')
+    expect(info.instanceId).toBeUndefined()
+    expect(info.windowId).toBe(5)
+  })
   test('same URL with multiple views is left unknown', async () => {
     const { api } = page()
     api.runtime.getContexts = async () => [

@@ -160,14 +160,32 @@ function manifestPage(operation: string): URL {
  */
 let openWindows: Set<number> | undefined
 
+/**
+ * Chrome reports side panel contexts with `windowId: -1`, so the window of an
+ * open panel is asked from the panel pages that called registerPanel().
+ */
 async function chromeIsOpen(windowId: number): Promise<boolean> {
+  if (registeredWindow === windowId || openWindows?.has(windowId)) return true
   const contexts = await call('isOpen', ['runtime', 'getContexts'], {
     contextTypes: ['SIDE_PANEL'],
-    windowIds: [windowId],
   })
   if (!Array.isArray(contexts))
     fail('NATIVE_ERROR', 'isOpen', 'Invalid runtime.getContexts result')
-  return contexts.some((context) => object(context)?.windowId === windowId)
+  if (!contexts.length) return false
+  const ids = contexts.map((context) => object(context)?.windowId)
+  if (ids.every(validId)) return ids.includes(windowId)
+  try {
+    const answer = await call('isOpen', ['runtime', 'sendMessage'], {
+      protocol: PROTOCOL,
+      version: 1,
+      type: 'query',
+      windowId,
+    })
+    return answer === true
+  } catch {
+    // No registered panel answered.
+    return false
+  }
 }
 
 function chromeChange(
@@ -184,21 +202,53 @@ function chromeChange(
  * Opens or closes the panel. Firefox calls the native API synchronously so the
  * user gesture is kept; Chrome resolves the window first when it is omitted.
  */
+/**
+ * Waits until isOpen() reports the new state. Native calls may resolve before
+ * the panel document is created or destroyed (Chrome); this makes open/close
+ * complete at the same point in every browser.
+ */
+async function settle(
+  operation: string,
+  windowId: number | undefined,
+  expected: boolean | undefined
+): Promise<void> {
+  try {
+    const id = windowId ?? (await focusedWindow(operation))
+    for (let attempt = 0; attempt < SETTLE_ATTEMPTS; attempt++) {
+      const state = await openState(id)
+      if (expected === undefined ? true : state === expected) return
+      await new Promise((resolve) => setTimeout(resolve, SETTLE_INTERVAL))
+    }
+  } catch {
+    /* The native operation itself succeeded. */
+  }
+}
+const SETTLE_ATTEMPTS = 40
+const SETTLE_INTERVAL = 25
+
+/**
+ * Opens or closes the panel. The native call starts before any await whenever
+ * possible so the user gesture is kept: always in Firefox, and in Chrome when
+ * the window (and, for toggle, its state) is known synchronously.
+ */
 function change(
   operation: 'open' | 'close' | 'toggle',
   options?: SidePanelWindowOptions
 ): Promise<void> {
   try {
     const windowId = windowOptions(options, operation)
-    if (native(operation) === 'firefox')
-      return call(operation, ['sidebarAction', operation]).then(() => {})
-    if (windowId !== undefined && operation !== 'toggle')
-      return chromeChange(operation, windowId)
-    if (windowId !== undefined && openWindows)
-      return chromeChange(
-        openWindows.has(windowId) ? 'close' : 'open',
-        windowId
+    if (native(operation) === 'firefox') {
+      const expected = operation === 'toggle' ? undefined : operation === 'open'
+      return call(operation, ['sidebarAction', operation]).then(() =>
+        settle(operation, windowId, expected)
       )
+    }
+    const run = (next: 'open' | 'close', id: number) =>
+      chromeChange(next, id).then(() => settle(operation, id, next === 'open'))
+    if (windowId !== undefined && operation !== 'toggle')
+      return run(operation, windowId)
+    if (windowId !== undefined && openWindows)
+      return run(openWindows.has(windowId) ? 'close' : 'open', windowId)
     return (async () => {
       const id = windowId ?? (await focusedWindow(operation))
       const next =
@@ -207,7 +257,7 @@ function change(
           : (await chromeIsOpen(id))
             ? 'close'
             : 'open'
-      await chromeChange(next, id)
+      await run(next, id)
     })()
   } catch (cause) {
     return Promise.reject(convert(operation, cause))
@@ -221,7 +271,8 @@ function change(
  * `await` を挟まずに呼び出してください。** ブラウザはユーザー操作の外での開閉を拒否します
  * （`USER_GESTURE_REQUIRED`）。
  *
- * 既に開いている場合は何もしません。
+ * 既に開いている場合は何もしません。完了した時点で、{@link isOpen} は `true` を返します
+ * （ブラウザへの反映を最大 1 秒待ちます）。
  *
  * @param options 対象ウィンドウ。省略時はユーザーが操作中のウィンドウ
  * @throws {WebextError} `USER_GESTURE_REQUIRED` / `UNSUPPORTED_OPERATION` / `WINDOW_NOT_FOUND` など
@@ -241,7 +292,7 @@ function open(options?: SidePanelWindowOptions): Promise<void> {
  * サイドパネルを閉じます。
  *
  * {@link open} と同じく、ユーザー操作の処理内で呼び出してください。
- * 既に閉じている場合は何もしません。
+ * 既に閉じている場合は何もしません。完了した時点で、{@link isOpen} は `false` を返します。
  *
  * @param options 対象ウィンドウ。省略時はユーザーが操作中のウィンドウ
  */
@@ -263,7 +314,9 @@ function toggle(options?: SidePanelWindowOptions): Promise<void> {
 /**
  * このウィンドウでサイドパネル（この拡張機能のパネル）が開いているかを返します。
  *
- * ユーザー操作は不要です。
+ * ユーザー操作は不要です。正しく判定するには、パネル側のページで {@link registerPanel} を
+ * 呼び出してください（Chrome はブラウザ API からパネルのウィンドウを取得できないため、
+ * パネル自身と Background の {@link startBackground} が状態を答えます）。
  *
  * @param options 対象ウィンドウ。省略時は最後にフォーカスされたウィンドウ
  *
@@ -274,19 +327,23 @@ function toggle(options?: SidePanelWindowOptions): Promise<void> {
  */
 async function isOpen(options?: SidePanelWindowOptions): Promise<boolean> {
   try {
-    const kind = native('isOpen')
+    native('isOpen')
     const windowId =
       windowOptions(options, 'isOpen') ?? (await focusedWindow('isOpen'))
-    if (kind === 'chrome') return await chromeIsOpen(windowId)
-    const result = await call('isOpen', ['sidebarAction', 'isOpen'], {
-      windowId,
-    })
-    if (typeof result !== 'boolean')
-      fail('NATIVE_ERROR', 'isOpen', 'Invalid native sidebar state')
-    return result
+    return await openState(windowId)
   } catch (cause) {
     throw convert('isOpen', cause)
   }
+}
+
+async function openState(windowId: number): Promise<boolean> {
+  if (native('isOpen') === 'chrome') return await chromeIsOpen(windowId)
+  const result = await call('isOpen', ['sidebarAction', 'isOpen'], {
+    windowId,
+  })
+  if (typeof result !== 'boolean')
+    fail('NATIVE_ERROR', 'isOpen', 'Invalid native sidebar state')
+  return result
 }
 
 /* -------------------------------------------------------------------------- */
@@ -371,14 +428,25 @@ async function getPage(): Promise<string> {
 /* -------------------------------------------------------------------------- */
 /* Events                                                                     */
 /* -------------------------------------------------------------------------- */
+/*
+ * The Background is the single source of open/close events in every browser:
+ * - Chrome: native sidePanel.onOpened / onClosed (they also wake the worker).
+ * - Firefox: each registered panel holds one Port to the Background; the Port
+ *   disconnects when the panel document is destroyed.
+ * The Background then broadcasts the event to every extension page.
+ */
+
+type EventType = 'opened' | 'closed'
 
 const listeners = {
   opened: new Set<SidePanelListener>(),
   closed: new Set<SidePanelListener>(),
 }
-let removeNativeListener: (() => void) | undefined
+let removeMessageListener: (() => void) | undefined
+/** Set while startBackground() is active in this realm. */
+let hub: { publish(type: EventType, event: SidePanelEvent): void } | undefined
 
-function emit(type: 'opened' | 'closed', event: SidePanelEvent): void {
+function emit(type: EventType, event: SidePanelEvent): void {
   for (const listener of [...listeners[type]]) {
     try {
       listener(event)
@@ -388,55 +456,59 @@ function emit(type: 'opened' | 'closed', event: SidePanelEvent): void {
   }
 }
 
-function eventMessage(value: unknown, sender: unknown) {
-  const message = object(value)
-  if (message?.protocol !== PROTOCOL || message.version !== 1) return
+/** Accepts messages only from this extension's own pages and Background. */
+function trusted(sender: unknown): boolean {
   const from = object(sender)
-  const url = parseUrl(from?.url)
+  if (!from || from.id !== nativeValue('runtime', 'id')) return false
+  // Content Scripts run on web pages; extension pages (also those in tabs)
+  // and the Background have an extension URL.
+  const url = parseUrl(from.url)
   const base = parseUrl(nativeMethod('runtime', 'getURL')?.(''))
+  return !!url && !!base && isExtensionUrl(url, base)
+}
+
+function message(
+  value: unknown,
+  types: readonly string[]
+): { type: string; event: SidePanelEvent } | undefined {
+  const data = object(value)
   if (
-    !from ||
-    from.id !== nativeValue('runtime', 'id') ||
-    from.tab !== undefined ||
-    !url ||
-    !base ||
-    !isExtensionUrl(url, base) ||
-    (message.type !== 'opened' && message.type !== 'closed') ||
-    !validId(message.windowId)
+    data?.protocol !== PROTOCOL ||
+    data.version !== 1 ||
+    typeof data.type !== 'string' ||
+    !types.includes(data.type) ||
+    !validId(data.windowId)
   )
     return
-  let page: string
   try {
-    page = pageUrl(message.page, 'event', true).href
+    const page = pageUrl(data.page, 'event', true).href
+    return {
+      type: data.type,
+      event: Object.freeze({ windowId: data.windowId, page }),
+    }
   } catch {
     return
   }
-  return {
-    type: message.type as 'opened' | 'closed',
-    event: Object.freeze({ windowId: message.windowId, page }),
-  }
 }
 
-function subscribe(
-  type: 'opened' | 'closed',
-  listener: SidePanelListener
-): Unsubscribe {
+function subscribe(type: EventType, listener: SidePanelListener): Unsubscribe {
   const operation = type === 'opened' ? 'onOpened' : 'onClosed'
   try {
     root(operation)
     if (typeof listener !== 'function')
       fail('INVALID_ARGUMENT', operation, 'Expected a listener function')
-    if (!removeNativeListener) {
+    if (!removeMessageListener) {
       const add = nativeMethod('runtime', 'onMessage', 'addListener')
       const remove = nativeMethod('runtime', 'onMessage', 'removeListener')
       if (!add || !remove)
         fail('UNSUPPORTED_OPERATION', operation, 'Missing runtime.onMessage')
       const onMessage = (value: unknown, sender: unknown) => {
-        const received = eventMessage(value, sender)
-        if (received) emit(received.type, received.event)
+        const received = message(value, ['opened', 'closed'])
+        if (received && trusted(sender))
+          emit(received.type as EventType, received.event)
       }
       add(onMessage)
-      removeNativeListener = () => remove(onMessage)
+      removeMessageListener = () => remove(onMessage)
     }
     const registered = (event: SidePanelEvent) => listener(event)
     listeners[type].add(registered)
@@ -446,8 +518,8 @@ function subscribe(
       active = false
       listeners[type].delete(registered)
       if (!listeners.opened.size && !listeners.closed.size) {
-        removeNativeListener?.()
-        removeNativeListener = undefined
+        removeMessageListener?.()
+        removeMessageListener = undefined
       }
     }
   } catch (cause) {
@@ -458,9 +530,9 @@ function subscribe(
 /**
  * サイドパネルが開いたときに呼ばれるリスナーを登録します。
  *
- * Background と拡張機能ページ（ポップアップ・タブ・サイドパネル）で使えます。
- * 通知はパネル側のページで {@link registerPanel} を呼び出した場合にだけ発生します
- * （両ブラウザで同じ仕組みを使うため）。
+ * Background と拡張機能のページ（ポップアップ・タブ・サイドパネル）で使えます。
+ * 通知には、Background での {@link startBackground} と、パネル側のページでの
+ * {@link registerPanel} が必要です（両ブラウザで同じ仕組みにするため）。
  *
  * @returns リスナーを解除する関数
  *
@@ -487,16 +559,28 @@ function onClosed(listener: SidePanelListener): Unsubscribe {
   return subscribe('closed', listener)
 }
 
+/* -------------------------------------------------------------------------- */
+/* Panel page                                                                 */
+/* -------------------------------------------------------------------------- */
+
+const PORT = `${PROTOCOL}/panel`
+/** Minimum lifetime (ms) of a Port before the panel reconnects it. */
+const RECONNECT_AFTER = 1000
+
 let registration: Subscription | undefined
+/** The window of the panel registered in this page, once known. */
+let registeredWindow: number | undefined
 
 /**
- * 現在のページをサイドパネルとして登録し、開閉を {@link onOpened} / {@link onClosed} に通知します。
+ * 現在のページをサイドパネルとして登録します。
  *
  * サイドパネルとして表示する HTML のスクリプトで、読み込み時に一度だけ呼び出してください。
- * ページが破棄される（`pagehide`）と自動的に「閉じた」と通知します。
+ * 次の機能が、両ブラウザで同じように動くようになります。
  *
- * @returns 登録の解除関数。`ready` は「開いた」通知の送信後に解決します。
- *   解除しても「閉じた」通知は送信しません。
+ * - {@link onOpened} / {@link onClosed} の通知（Background の {@link startBackground} も必要）
+ * - {@link isOpen} / {@link toggle} による開閉状態の判定
+ *
+ * @returns 登録の解除関数。`ready` はウィンドウを特定して登録が完了すると解決します。
  * @throws {WebextError} 拡張機能のページ以外では `CONTEXT_UNAVAILABLE`、二重登録は `INVALID_ARGUMENT`
  *
  * @example
@@ -511,8 +595,7 @@ function registerPanel(): Subscription {
   const operation = 'registerPanel'
   try {
     const base = root(operation)
-    const href = property(property(globalThis, 'location'), 'href')
-    const url = parseUrl(href)
+    const url = parseUrl(property(property(globalThis, 'location'), 'href'))
     const window = property(globalThis, 'window') as
       | {
           addEventListener(type: string, listener: () => void): void
@@ -527,38 +610,95 @@ function registerPanel(): Subscription {
       )
     if (registration)
       fail('INVALID_ARGUMENT', operation, 'The panel is already registered')
-    const send = nativeMethod('runtime', 'sendMessage')
-    if (!send)
-      fail('UNSUPPORTED_OPERATION', operation, 'Missing runtime.sendMessage')
+    const kind = native(operation)
+    const addListener = nativeMethod('runtime', 'onMessage', 'addListener')
+    const removeListener = nativeMethod(
+      'runtime',
+      'onMessage',
+      'removeListener'
+    )
+    if (!addListener || !removeListener)
+      fail('UNSUPPORTED_OPERATION', operation, 'Missing runtime.onMessage')
     const page = url.href
     let windowId: number | undefined
     let active = true
-    const announce = (type: 'opened' | 'closed') => {
-      if (windowId === undefined) return
-      const event = Object.freeze({ windowId, page })
-      emit(type, event)
+    let port: Port | undefined
+
+    const send = (type: 'present') => {
+      void call(operation, ['runtime', 'sendMessage'], {
+        protocol: PROTOCOL,
+        version: 1,
+        type,
+        windowId,
+        page,
+      }).catch(() => {
+        /* The Background is not listening. */
+      })
+    }
+    // Firefox: one Port to the Background. It disconnects when this document
+    // is destroyed, which is how the Background observes the panel closing.
+    const connect = (type: 'opened' | 'present') => {
+      const connectMethod = nativeMethod('runtime', 'connect')
+      if (!active || !connectMethod) return
       try {
-        void Promise.resolve(
-          send({ protocol: PROTOCOL, version: 1, type, windowId, page })
-        ).catch(() => {
-          // No receiver is listening; read lastError for Chrome callbacks.
+        const current = connectMethod({ name: PORT }) as Port
+        const connectedAt = Date.now()
+        port = current
+        current.onDisconnect.addListener(() => {
           nativeValue('runtime', 'lastError')
+          if (port !== current || !active) return
+          port = undefined
+          // The Background was stopped while the panel stayed open: reconnect
+          // so the restarted Background knows this panel. An immediate
+          // disconnect means nothing listens, so do not retry in a loop.
+          if (Date.now() - connectedAt >= RECONNECT_AFTER) connect('present')
+        })
+        current.postMessage({
+          protocol: PROTOCOL,
+          version: 1,
+          type,
+          windowId,
+          page,
         })
       } catch {
-        /* The page is being destroyed. */
+        port = undefined
       }
+    }
+    // Answers isOpen() queries (Chrome) and state probes from the Background.
+    const onMessage = (
+      value: unknown,
+      sender: unknown,
+      respond: unknown
+    ): undefined => {
+      const data = object(value)
+      if (
+        data?.protocol !== PROTOCOL ||
+        data.version !== 1 ||
+        windowId === undefined ||
+        !trusted(sender)
+      )
+        return
+      if (data.type === 'probe' && kind === 'chrome') send('present')
+      else if (
+        data.type === 'query' &&
+        data.windowId === windowId &&
+        typeof respond === 'function'
+      )
+        respond(true)
     }
     const stop = () => {
       if (!active) return
       active = false
       registration = undefined
-      window.removeEventListener('pagehide', hide)
+      registeredWindow = undefined
+      window.removeEventListener('pagehide', stop)
+      removeListener(onMessage)
+      const current = port
+      port = undefined
+      current?.disconnect()
     }
-    const hide = () => {
-      announce('closed')
-      stop()
-    }
-    window.addEventListener('pagehide', hide)
+    window.addEventListener('pagehide', stop)
+    addListener(onMessage)
     const ready = (async () => {
       const current = object(await call(operation, ['windows', 'getCurrent']))
       if (!validId(current?.id))
@@ -566,7 +706,8 @@ function registerPanel(): Subscription {
       if (!active)
         fail('TRANSPORT_CLOSED', operation, 'Registration was removed')
       windowId = current.id
-      announce('opened')
+      registeredWindow = current.id
+      if (kind === 'firefox') connect('opened')
     })()
     ready.catch(stop)
     registration = Object.assign(stop, { ready })
@@ -576,20 +717,33 @@ function registerPanel(): Subscription {
   }
 }
 
+interface Port {
+  name: string
+  postMessage(message: unknown): void
+  disconnect(): void
+  onMessage: {
+    addListener(listener: (message: unknown) => void): void
+    removeListener(listener: (message: unknown) => void): void
+  }
+  onDisconnect: {
+    addListener(listener: () => void): void
+    removeListener(listener: () => void): void
+  }
+}
+
 /* -------------------------------------------------------------------------- */
 /* Background                                                                 */
 /* -------------------------------------------------------------------------- */
 
-let background = false
-
 /**
- * Background でサイドパネルの補助機能を開始します。
+ * Background でサイドパネルの機能を開始します。
  *
  * Background のスクリプトの最上位で、最初の `await` より前に同期的に呼び出してください
  * （Service Worker / イベントページの再起動ごとに登録が必要です）。
  *
+ * - {@link onOpened} / {@link onClosed} の通知を、すべての拡張機能のページへ配信します。
  * - `openOnActionClick: true` で、拡張機能アイコンのクリックでパネルを開閉します。
- * - Background から {@link toggle} を `windowId` 付きで呼んだときも、ユーザー操作内で開閉できるようになります。
+ * - Background から {@link toggle} を `windowId` 付きで呼んだときも、ユーザー操作内で開閉できます。
  *
  * @returns 登録を解除する関数
  * @throws {WebextError} Background 以外では `CONTEXT_UNAVAILABLE`、二重登録は `INVALID_ARGUMENT`
@@ -622,7 +776,7 @@ function startBackground(
         operation,
         'startBackground must be called in the Background'
       )
-    if (background)
+    if (hub)
       fail(
         'INVALID_ARGUMENT',
         operation,
@@ -638,43 +792,113 @@ function startBackground(
       add(listener)
       stops.push(() => remove(listener))
     }
+    const windows = new Set<number>()
+    const current = {
+      publish(type: EventType, event: SidePanelEvent) {
+        emit(type, event)
+        void call(operation, ['runtime', 'sendMessage'], {
+          protocol: PROTOCOL,
+          version: 1,
+          type,
+          ...event,
+        }).catch(() => {
+          /* No extension page is listening. */
+        })
+      },
+    }
     try {
       if (kind === 'chrome') {
-        const windows = new Set<number>()
         openWindows = windows
         stops.push(() => {
           if (openWindows === windows) openWindows = undefined
         })
-        const update = (open: boolean) => (info: unknown) => {
-          const id = object(info)?.windowId
-          if (validId(id)) open ? windows.add(id) : windows.delete(id)
+        // Chrome's event path drops the query and hash, so the configured
+        // page is used to report the same URL as Firefox.
+        const pages = new Map<number, string>()
+        const nativeEvent = (type: EventType) => (info: unknown) => {
+          const data = object(info)
+          if (!validId(data?.windowId) || data.tabId !== undefined) return
+          const windowId = data.windowId
+          if (type === 'closed') {
+            windows.delete(windowId)
+            const page = pages.get(windowId)
+            pages.delete(windowId)
+            if (page)
+              current.publish('closed', Object.freeze({ windowId, page }))
+            return
+          }
+          windows.add(windowId)
+          void getPage()
+            .catch(() => pageUrl(data.path, 'event', true).href)
+            .then((page) => {
+              if (!windows.has(windowId) || pages.has(windowId)) return
+              pages.set(windowId, page)
+              current.publish('opened', Object.freeze({ windowId, page }))
+            })
+            .catch(() => {
+              /* The native path does not belong to this extension. */
+            })
         }
-        if (nativeMethod('sidePanel', 'onOpened', 'addListener'))
-          listen(['sidePanel', 'onOpened'], update(true))
-        if (nativeMethod('sidePanel', 'onClosed', 'addListener'))
-          listen(['sidePanel', 'onClosed'], update(false))
+        listen(['sidePanel', 'onOpened'], nativeEvent('opened'))
+        listen(['sidePanel', 'onClosed'], nativeEvent('closed'))
         listen(['windows', 'onRemoved'], (id: unknown) => {
           if (validId(id)) windows.delete(id)
         })
-        void call(operation, ['runtime', 'getContexts'], {
-          contextTypes: ['SIDE_PANEL'],
+        listen(
+          ['runtime', 'onMessage'],
+          (data: unknown, sender: unknown, respond: unknown) => {
+            if (!trusted(sender)) return
+            // Registered panels report their window after a worker restart.
+            const received = message(data, ['present'])
+            if (received) windows.add(received.event.windowId)
+            // isOpen() from other pages: only a known open window is answered,
+            // so a registered panel can still answer when this state is stale.
+            const query = object(data)
+            if (
+              query?.protocol === PROTOCOL &&
+              query.type === 'query' &&
+              validId(query.windowId) &&
+              windows.has(query.windowId) &&
+              typeof respond === 'function'
+            )
+              respond(true)
+          }
+        )
+        void call(operation, ['runtime', 'sendMessage'], {
+          protocol: PROTOCOL,
+          version: 1,
+          type: 'probe',
+        }).catch(() => {
+          /* No panel is open. */
         })
-          .then((contexts) => {
-            if (!Array.isArray(contexts)) return
-            for (const context of contexts) {
-              const id = object(context)?.windowId
-              if (validId(id)) windows.add(id)
-            }
+      } else {
+        listen(['runtime', 'onConnect'], (value: unknown) => {
+          const port = value as Port & { sender?: unknown }
+          if (object(port)?.name !== PORT) return
+          if (!trusted(port.sender)) {
+            port.disconnect()
+            return
+          }
+          let event: SidePanelEvent | undefined
+          port.onMessage.addListener((data) => {
+            const received = message(data, ['opened', 'present'])
+            if (!received || event) return
+            event = received.event
+            if (received.type === 'opened') current.publish('opened', event)
           })
-          .catch(() => {})
+          port.onDisconnect.addListener(() => {
+            nativeValue('runtime', 'lastError')
+            if (event && hub === current) current.publish('closed', event)
+            event = undefined
+          })
+        })
       }
       if (value.openOnActionClick === true) {
         const report = (cause: unknown) => {
           try {
-            value.onError &&
-              (value.onError as (error: WebextError) => void)(
-                convert('toggle', cause)
-              )
+            ;(value.onError as ((error: WebextError) => void) | undefined)?.(
+              convert('toggle', cause)
+            )
           } catch {
             /* Independent observer. */
           }
@@ -688,12 +912,12 @@ function startBackground(
       for (const stop of stops.reverse()) stop()
       throw cause
     }
-    background = true
+    hub = current
     let active = true
     return () => {
       if (!active) return
       active = false
-      background = false
+      if (hub === current) hub = undefined
       for (const stop of stops.reverse()) stop()
     }
   } catch (cause) {
@@ -710,9 +934,9 @@ function startBackground(
  * | {@link open} / {@link close} / {@link toggle} | 開閉（ユーザー操作内で呼ぶ） |
  * | {@link isOpen} | 開いているか |
  * | {@link setPage} / {@link getPage} / {@link resetPage} | 表示するページ |
- * | {@link registerPanel} | パネル側のページで呼び、開閉を通知する |
+ * | {@link registerPanel} | パネル側のページで呼ぶ（開閉状態の判定・通知に必要） |
  * | {@link onOpened} / {@link onClosed} | 開閉の通知を受け取る |
- * | {@link startBackground} | アイコンのクリックで開閉するなどの Background 機能 |
+ * | {@link startBackground} | Background で呼ぶ（開閉の通知・アイコンのクリックでの開閉） |
  *
  * @example
  * ```ts

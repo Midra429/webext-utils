@@ -28,15 +28,27 @@ export interface PopoutBaseOptions {
    * 関連付けは固定で、アクティブなタブには追従しません。
    */
   associatedTabId?: number
-  /** ウィンドウの幅（px）です。@default 480 */
+  /**
+   * ウィンドウの幅（px）です。
+   *
+   * @default 480
+   */
   width?: number
-  /** ウィンドウの高さ（px）です。@default 720 */
+  /**
+   * ウィンドウの高さ（px）です。
+   *
+   * @default 720
+   */
   height?: number
   /** ウィンドウの左端の位置（px）です。省略時はブラウザが決めます。 */
   left?: number
   /** ウィンドウの上端の位置（px）です。省略時はブラウザが決めます。 */
   top?: number
-  /** 開いたウィンドウにフォーカスするかです。@default true */
+  /**
+   * 開いたウィンドウにフォーカスするかです。
+   *
+   * @default true
+   */
   focused?: boolean
   /**
    * 再利用キーです。同じキーの popout が既に開いていれば、新しく開かずにそのウィンドウへフォーカスします。
@@ -120,11 +132,19 @@ export type OriginalUiClose =
 
 /** {@link PopoutHandle.messageTarget} のオプションです。 */
 export interface PopoutMessageTargetOptions {
-  /** 宛先のフレーム ID です。@default 0 */
+  /**
+   * 宛先のフレーム ID です。
+   *
+   * @default 0
+   */
   frameId?: number
   /** 宛先の文書 ID です。 */
   documentId?: string
-  /** 宛先の Content Script のワールドです。@default 'ISOLATED' */
+  /**
+   * 宛先の Content Script のワールドです。
+   *
+   * @default 'ISOLATED'
+   */
   world?: 'ISOLATED' | 'MAIN'
 }
 
