@@ -146,14 +146,18 @@ const bridge = messaging.installPageBridge({
       validateResponse: (v: unknown): v is string => typeof v === 'string',
     },
   },
-  limits: {
-    maxBytes: 65536,
-    maxDepth: 32,
-    maxPending: 32,
-    requestsPerMinute: 60,
-  },
 })
 bridge.dispose()
+messaging.installPageBridge({
+  channel: 'public',
+  allowedOrigins: [],
+  fromPage: {},
+  toPage: {},
+  // @ts-expect-error resource limits were removed
+  limits: { maxPending: 32 },
+})
+// @ts-expect-error resource limits were removed
+webextMessaging({ bridge: { channel: 'public', limits: {} } })
 messaging.installPageBridge({
   channel: 'public',
   allowedOrigins: [],

@@ -1,5 +1,5 @@
 import type { WebextError } from '../../internal/errors'
-import type { Limits, PageEnvironment } from './wire'
+import type { PageEnvironment } from './wire'
 
 import { object } from '../../internal/browser'
 import { nativeError } from '../../internal/errors'
@@ -20,7 +20,6 @@ export abstract class PagePeer {
   constructor(
     protected channel: string,
     protected page: PageEnvironment,
-    protected bound: Limits,
     protected isolated: boolean
   ) {}
   protected attach(): void {
@@ -36,7 +35,7 @@ export abstract class PagePeer {
   private receive = (event: Event): void => {
     try {
       if (event.target !== this.page.document || this.suspended) return
-      const v = decode((event as CustomEvent<unknown>).detail, this.bound)
+      const v = decode((event as CustomEvent<unknown>).detail)
       if (v.direction !== (this.isolated ? 'from-page' : 'to-page')) return
       if (v.type === 'reply') {
         if (v.session !== this.session) return
@@ -57,22 +56,16 @@ export abstract class PagePeer {
       throw fail('TRANSPORT_CLOSED', 'Page bridge closed')
     this.page.emit(
       eventName(this.channel, !this.isolated),
-      encode(
-        {
-          protocol: PAGE_PROTOCOL,
-          version: 1,
-          direction: this.isolated ? 'to-page' : 'from-page',
-          type,
-          id,
-          session: this.session,
-          ...extra,
-        },
-        this.bound
-      )
+      encode({
+        protocol: PAGE_PROTOCOL,
+        version: 1,
+        direction: this.isolated ? 'to-page' : 'from-page',
+        type,
+        id,
+        session: this.session,
+        ...extra,
+      })
     )
-  }
-  protected load(): number {
-    return this.pending.size
   }
   protected async exchange(
     type: string,
@@ -80,8 +73,6 @@ export abstract class PagePeer {
     timeoutMs = DEFAULT_TIMEOUT,
     cancellations = new Set<(error: WebextError) => void>()
   ): Promise<unknown> {
-    if (this.load() >= this.bound.maxPending)
-      throw fail('QUOTA_EXCEEDED', 'Too many pending page requests')
     const id = crypto.randomUUID()
     try {
       return await deadline(

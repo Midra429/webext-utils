@@ -36,7 +36,6 @@ export type {
   NotificationName,
   NotificationReport,
   PageBridge,
-  PageBridgeLimits,
   PageBridgeOptions,
   PageMessageRule,
   ResolvedMessages,
@@ -71,12 +70,7 @@ export { WebextError, isWebextError } from '../internal/errors'
 function create<Override = {}>(
   options: MessagingOptions = {}
 ): MessagingClient<Override> {
-  if (options.bridge)
-    return PageClient.create<Override>(
-      options.bridge.channel,
-      undefined,
-      options.bridge.limits
-    )
+  if (options.bridge) return PageClient.create<Override>(options.bridge.channel)
   const owner = {}
   const cancellations = new Set<(error: ReturnType<typeof fail>) => void>()
   let disposed = false

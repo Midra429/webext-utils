@@ -51,7 +51,6 @@ const bridge = messaging.installPageBridge({
 | `allowedOrigins` | ブリッジを有効にするページのオリジン（HTTP(S) のみ） |
 | `fromPage` | MAIN world から送れるメッセージ。宛先 `target` と validator が必須 |
 | `toPage` | MAIN world で受信できるメッセージ。validator が必須 |
-| `limits` | 資源上限（下表） |
 
 validator は型ガード関数です。`false` を返すか例外を投げると `VALIDATION_ERROR` になります。データがない場合（`void`）も `undefined` を検査してください。
 
@@ -120,16 +119,21 @@ publicStorage.watch('settings.theme', ({ newValue }) => console.log(newValue))
 - MAIN world から `migrate` はできません。
 - BFCache から復帰したときは購読を再登録し、最新値との差分を通知します。
 
-## 資源上限
+## 負荷の扱い
 
-| 上限 | 既定値 | 説明 |
-| --- | --- | --- |
-| `maxBytes` | 65536 | 1メッセージの最大バイト数（UTF-8） |
-| `maxDepth` | 32 | JSON の最大の深さ（最大 64） |
-| `maxPending` | 32 | 同時に処理中にできる要求数 |
-| `requestsPerMinute` | 60 | ISOLATED world が受け付ける1分あたりの要求数 |
+ブリッジには、要求の数やサイズに関する独自の上限はありません。ページ上の任意のスクリプトが要求を送れることを前提に、次の方法で拡張機能を守ります。
 
-ISOLATED world は `installPageBridge({ limits })`、MAIN world は `webextMessaging({ bridge: { channel, limits } })` で設定します。送受信の両側の上限を満たす必要があります。
+- **ページ由来の処理は document ごとに1件ずつ**: Background に届く処理（`fromPage` の送信、storage の操作、受信ハンドラーの登録）は、同じ document の要求を順番に1件ずつ実行します。チャネルが複数あっても同じ順番待ちを使います。大量に送られても、全タブで共有する Background に同時に届くのは1つの document（フレーム）につき1件だけで、待ち行列はそのページのプロセスに溜まります。
+- **待ち時間も期限に含める**: 順番を待つ間に `timeoutMs`（既定 10 秒）を過ぎた要求は、Background に送らずに `TIMEOUT` で終わります。
+- **Background に届くデータは共通の形式に従う**: 拡張機能の通信全体と同じく、JSON 互換・深さ 64・UTF-8 で 1 MiB までです。これを超える値は `SERIALIZATION_ERROR` です。ブリッジ内で受信したデータの解析・検査は、入れ子がどれだけ深くても処理できる方法で行います。
+
+ISOLATED world と MAIN world の Content Script は、そのページと同じタブのプロセスで動きます。そのため、巨大なデータや大量の要求による解析・待機の負荷は、ページが自分で重い処理をした場合と同じく、そのタブの中にとどまります。
+
+注意点:
+
+- ページ由来の要求は並列に実行されません。時間のかかる要求を同時に複数送ると、後の要求はその分だけ待ちます。
+- MAIN world の受信ハンドラーの中から別の要求を送って応答を待つと、待ちが循環して `TIMEOUT` になることがあります（外側の要求が終わるまで内側の要求が始まらないため）。
+- `storage.sync` には、ブラウザ側に書き込み頻度の上限があります。ページに書き込みを公開すると、ページの連打で拡張機能全体の `sync` への保存が `QUOTA_EXCEEDED` になり得ます。ページに書き込みを公開するのは `local` / `session` 領域にしてください。
 
 ## セキュリティ上の注意
 

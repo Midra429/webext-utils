@@ -1,17 +1,12 @@
 import type { Unsubscribe } from '../../internal/types'
-import type {
-  MessageSender,
-  MessagingClient,
-  PageBridgeLimits,
-  SendOptions,
-} from '../types'
+import type { MessageSender, MessagingClient, SendOptions } from '../types'
 
 import { object } from '../../internal/browser'
 import { assertJson } from '../../internal/json'
 import { DEFAULT_TIMEOUT, deadline, fail, name, target } from '../protocol'
 import { PagePeer } from './peer'
 import { serviceClients } from './services'
-import { PageEnvironment, channel, encode, limits } from './wire'
+import { PageEnvironment, channel, encode } from './wire'
 
 type Handler = (data: unknown, sender: MessageSender) => unknown
 const clients = new WeakMap<object, Map<string, PageClient>>()
@@ -35,33 +30,23 @@ export class PageClient extends PagePeer {
     { name: string; callback: (value: unknown) => void }
   >()
   private reconnectListeners = new Set<() => void>()
-  private constructor(
-    channel: string,
-    page: PageEnvironment,
-    settings?: PageBridgeLimits
-  ) {
-    super(channel, page, limits(settings), false)
+  private constructor(channel: string, page: PageEnvironment) {
+    super(channel, page, false)
     this.session = crypto.randomUUID()
     this.attach()
   }
   static create<O>(
     key: string,
-    page = new PageEnvironment(),
-    settings?: PageBridgeLimits
+    page = new PageEnvironment()
   ): MessagingClient<O> {
     channel(key)
     const channels = clients.get(page.document) ?? new Map<string, PageClient>()
     clients.set(page.document, channels)
     let shared = channels.get(key)
     if (!shared || shared.stopped) {
-      shared = new PageClient(key, page, settings)
+      shared = new PageClient(key, page)
       channels.set(key, shared)
     }
-    if (
-      settings &&
-      JSON.stringify(limits(settings)) !== JSON.stringify(shared.bound)
-    )
-      throw fail('INVALID_ARGUMENT', 'Shared page channel limits must match')
     return shared.client<O>()
   }
   private client<O>(): MessagingClient<O> {
@@ -92,8 +77,8 @@ export class PageClient extends PagePeer {
       )
         throw fail('INVALID_ARGUMENT', 'Invalid page send options')
       if (options.target) target(options.target)
-      encode({ data: data === undefined ? null : data }, this.bound)
-      // Validate and bound before initiating a handshake or dispatch.
+      encode({ data: data === undefined ? null : data })
+      // Validate before initiating a handshake or dispatch.
       const started = Date.now()
       try {
         return await deadline(
@@ -210,7 +195,7 @@ export class PageClient extends PagePeer {
       request: async (name, data) => {
         active()
         assertJson(data, 'page.service')
-        encode({ data }, this.bound)
+        encode({ data })
         await this.ready()
         active()
         return this.result(
@@ -280,9 +265,6 @@ export class PageClient extends PagePeer {
     }
     if (this.accepted !== this.revision) await this.ready()
   }
-  protected override load(): number {
-    return this.pending.size + this.inFlight.size
-  }
   protected async handle(v: Record<string, unknown>): Promise<void> {
     if (v.session !== this.session) return
     if (v.type === 'close') {
@@ -306,8 +288,8 @@ export class PageClient extends PagePeer {
     const id = String(v.id),
       epoch = this.epoch
     try {
-      if (this.inFlight.has(id) || this.load() >= this.bound.maxPending)
-        throw fail('QUOTA_EXCEEDED', 'Page receiver busy')
+      if (this.inFlight.has(id))
+        throw fail('VALIDATION_ERROR', 'Duplicate page request ID')
       this.inFlight.add(id)
       name(v.name)
       const entry = this.handlers.get(v.name)

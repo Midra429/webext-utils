@@ -34,7 +34,6 @@ export type {
   NotificationName,
   NotificationReport,
   PageBridge,
-  PageBridgeLimits,
   PageBridgeOptions,
   PageMessageRule,
   ResolvedMessages,
