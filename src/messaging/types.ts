@@ -316,41 +316,13 @@ export interface MessagingOptions {
    *
    * チャネル名は通信の識別子であり、秘密情報や認証ではありません。
    */
-  bridge?: { channel: string; limits?: PageBridgeLimits }
+  bridge?: { channel: string }
 }
 
 /** 設置したブリッジです。 */
 export interface PageBridge {
   /** ブリッジを撤去します。 */
   dispose(): void
-}
-
-/** ブリッジの資源上限です。いずれも 1 以上の整数です。 */
-export interface PageBridgeLimits {
-  /**
-   * 1メッセージの最大バイト数（UTF-8）です。
-   *
-   * @default 65536
-   */
-  maxBytes?: number
-  /**
-   * JSON の最大の深さです（最大 64）。
-   *
-   * @default 32
-   */
-  maxDepth?: number
-  /**
-   * 同時に処理中にできる要求数です。
-   *
-   * @default 32
-   */
-  maxPending?: number
-  /**
-   * 1分あたりの最大要求数です。
-   *
-   * @default 60
-   */
-  requestsPerMinute?: number
 }
 
 /**
@@ -388,6 +360,4 @@ export interface PageBridgeOptions<O = {}> {
   }
   /** MAIN world で受信できるメッセージです。 */
   toPage: Policy<ResolvedMessages<O>>
-  /** 資源上限です。 */
-  limits?: PageBridgeLimits
 }

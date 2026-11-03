@@ -1,32 +1,8 @@
-import type { PageBridgeLimits } from '../types'
-
 import { object } from '../../internal/browser'
 import { assertJson } from '../../internal/json'
 import { fail } from '../protocol'
 
 export const PAGE_PROTOCOL = '@midra/webext-utils/page'
-export const defaults = {
-  maxBytes: 65536,
-  maxDepth: 32,
-  maxPending: 32,
-  requestsPerMinute: 60,
-}
-export type Limits = typeof defaults
-export function limits(options: PageBridgeLimits = {}): Limits {
-  const result = { ...defaults, ...options }
-  for (const [key, value] of Object.entries(result))
-    if (
-      !Object.hasOwn(defaults, key) ||
-      !Number.isSafeInteger(value) ||
-      value < 1 ||
-      value > 1048576
-    )
-      throw fail('INVALID_ARGUMENT', 'Invalid page bridge limits')
-  // Keep recursive validation below the JavaScript stack limit.
-  if (result.maxDepth > 64)
-    throw fail('INVALID_ARGUMENT', 'maxDepth exceeds 64')
-  return result
-}
 export function channel(value: unknown): asserts value is string {
   if (typeof value !== 'string' || !value.length || value.length > 128)
     throw fail('INVALID_ARGUMENT', 'Invalid page channel')
@@ -34,38 +10,44 @@ export function channel(value: unknown): asserts value is string {
 export function eventName(channel: string, incoming: boolean): string {
   return `${PAGE_PROTOCOL}/1/${channel}/${incoming ? 'from-page' : 'to-page'}`
 }
-export function bounded(value: unknown, bound: Limits, depth = 0): void {
-  if (depth > bound.maxDepth)
-    throw fail('VALIDATION_ERROR', 'Page message too deep')
-  if (value && typeof value === 'object') {
-    for (const key of Object.keys(value)) {
-      if (['__proto__', 'prototype', 'constructor'].includes(key))
+const UNSAFE_KEYS = new Set(['__proto__', 'prototype', 'constructor'])
+
+/**
+ * Rejects prototype-related keys anywhere in a parsed value. The traversal is
+ * iterative, so any nesting depth is handled without a stack overflow.
+ */
+function rejectUnsafeKeys(value: unknown): void {
+  const stack: unknown[] = [value]
+  while (stack.length) {
+    const item = stack.pop()
+    if (!item || typeof item !== 'object') continue
+    for (const key of Object.keys(item)) {
+      if (UNSAFE_KEYS.has(key))
         throw fail('VALIDATION_ERROR', 'Unsafe page object key')
-      bounded((value as Record<string, unknown>)[key], bound, depth + 1)
+      stack.push((item as Record<string, unknown>)[key])
     }
   }
 }
-export function encode(value: unknown, bound: Limits): string {
+
+/**
+ * Serializes an outgoing page message. It uses the same JSON contract as all
+ * extension messaging, so nothing larger can be relayed to the Background.
+ */
+export function encode(value: unknown): string {
   assertJson(value)
-  bounded(value, bound)
-  const raw = JSON.stringify(value)
-  if (
-    raw.length > bound.maxBytes ||
-    new TextEncoder().encode(raw).length > bound.maxBytes
-  )
-    throw fail('VALIDATION_ERROR', 'Page message too large')
-  return raw
+  rejectUnsafeKeys(value)
+  return JSON.stringify(value)
 }
-export function decode(raw: unknown, bound: Limits): Record<string, unknown> {
-  if (
-    typeof raw !== 'string' ||
-    raw.length > bound.maxBytes ||
-    new TextEncoder().encode(raw).length > bound.maxBytes
-  )
+
+/**
+ * Parses an incoming page message. Its cost stays in the page's own process;
+ * anything forwarded to the Background is checked again by messaging.
+ */
+export function decode(raw: unknown): Record<string, unknown> {
+  if (typeof raw !== 'string')
     throw fail('VALIDATION_ERROR', 'Invalid page event detail')
   const value: unknown = JSON.parse(raw)
-  // JSON.parse has no getters; the byte bound caps the traversal work.
-  bounded(value, bound)
+  rejectUnsafeKeys(value)
   const v = object(value)
   if (
     !v ||

@@ -1,6 +1,6 @@
 import type { Unsubscribe } from '../internal/types'
 import type { ServiceClient } from '../messaging/page/services'
-import type { PageBridge, PageBridgeLimits } from '../messaging/types'
+import type { PageBridge } from '../messaging/types'
 import type { Change, Operation, StorageRuntime } from './runtime'
 import type {
   PageStoragePolicy,
@@ -281,15 +281,10 @@ export class PageStorage {
   private stopEvents: Unsubscribe | undefined
   private stopReconnect: Unsubscribe | undefined
   private pending = 0
-  constructor(
-    private channel: string,
-    private limits?: PageBridgeLimits
-  ) {}
+  constructor(private channel: string) {}
   private client(): ServiceClient {
     if (!this.service) {
-      this.service = serviceClients.get(
-        PageClient.create(this.channel, undefined, this.limits)
-      )!
+      this.service = serviceClients.get(PageClient.create(this.channel))!
       this.stopEvents = this.service.listen('storage', (raw) => {
         const v = object(raw),
           c = object(v?.change)

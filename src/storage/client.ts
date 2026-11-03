@@ -37,7 +37,7 @@ export function createStorage<S>(
       throw fail('INVALID_ARGUMENT', 'Invalid storage validator')
   }
   const bridge = options.bridge
-    ? new PageStorage(options.bridge.channel, options.bridge.limits)
+    ? new PageStorage(options.bridge.channel)
     : undefined
   function parse(k: string, value: unknown): unknown {
     if (value === undefined) return undefined

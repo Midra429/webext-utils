@@ -1,7 +1,7 @@
 import type { WebextError } from '../internal/errors'
 import type { JsonValue } from '../internal/json'
 import type { Subscription, Unsubscribe } from '../internal/types'
-import type { PageBridge, PageBridgeLimits } from '../messaging/types'
+import type { PageBridge } from '../messaging/types'
 
 /**
  * 保存先の領域です。
@@ -98,7 +98,7 @@ export interface StorageOptions<S> {
    * MAIN world で使う場合に、ISOLATED world が設置したブリッジのチャネルを指定します。
    * 読み書きできるのは ISOLATED world で `exposeToPage` により公開したキーだけです。
    */
-  bridge?: { channel: string; limits?: PageBridgeLimits }
+  bridge?: { channel: string }
   /**
    * キー（namespace を含む完全なキー）ごとの validator です。
    *

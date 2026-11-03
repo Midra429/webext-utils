@@ -1,10 +1,10 @@
 import type { MessageHub } from '../hub'
-import type { MessageTarget, PageBridge, PageBridgeOptions } from '../types'
+import type { MessageTarget, PageBridge } from '../types'
 
 import { DEFAULT_TIMEOUT, deadline, fail, name, target } from '../protocol'
 import { PagePeer } from './peer'
 import { serviceHosts } from './services'
-import { PageEnvironment, channel, limits } from './wire'
+import { PageEnvironment, channel } from './wire'
 
 type Rule = {
   target?: MessageTarget
@@ -16,10 +16,22 @@ export type RuntimePolicy = {
   allowedOrigins: readonly string[]
   fromPage: Record<string, Rule>
   toPage: Record<string, Rule>
-  limits?: PageBridgeOptions['limits']
 }
 const installations = new WeakMap<object, Set<string>>()
-const traffic = new WeakMap<object, number[]>()
+/**
+ * Work started by a page reaches the shared Background. Each document's work
+ * runs one at a time (across all of its channels), so a page that floods the
+ * bridge only queues work in its own process instead of loading the
+ * Background with concurrent requests.
+ */
+const queues = new WeakMap<object, Promise<unknown>>()
+function serialize<T>(document: object, work: () => Promise<T>): Promise<T> {
+  const task = (queues.get(document) ?? Promise.resolve())
+    .catch(() => {})
+    .then(work)
+  queues.set(document, task)
+  return task
+}
 function origin(value: string): string {
   const url = new URL(value)
   if (
@@ -64,10 +76,9 @@ export class IsolatedBridge extends PagePeer implements PageBridge {
   private proxy: MessageHub
   private owner = {}
   private subscriptions: (() => void)[] = []
-  private seen = new Set<string>()
+  /** IDs of requests in progress; a reused ID would mix up replies. */
+  private activeIds = new Set<string>()
   private registeredNames: string[] = []
-  private active = 0
-  private updates: Promise<void> = Promise.resolve()
   private policy: RuntimePolicy
   constructor(
     private hub: MessageHub,
@@ -75,7 +86,7 @@ export class IsolatedBridge extends PagePeer implements PageBridge {
     page = new PageEnvironment(),
     private removed = () => {}
   ) {
-    super(options.channel, page, limits(options.limits), true)
+    super(options.channel, page, true)
     channel(options.channel)
     this.proxy = hub.pageHub()
     // Copy policy maps/targets: subsequent caller mutation cannot widen authority.
@@ -122,33 +133,27 @@ export class IsolatedBridge extends PagePeer implements PageBridge {
     )
       throw fail('ACCESS_DENIED', 'Page origin is not allowed')
   }
-  protected override load(): number {
-    return this.pending.size + this.active
-  }
   private admit(id: string): void {
     this.checkOrigin()
-    const now = Date.now()
-    const recent = (traffic.get(this.page.document) ?? []).filter(
-      (t) => now - t < 60000
-    )
-    if (
-      recent.length >= this.bound.requestsPerMinute ||
-      this.load() >= this.bound.maxPending ||
-      this.seen.has(id) ||
-      this.seen.size >= 65536
-    )
-      throw fail('QUOTA_EXCEEDED', 'Page request limit exceeded')
-    recent.push(now)
-    traffic.set(this.page.document, recent)
-    this.seen.add(id)
+    if (this.activeIds.has(id))
+      throw fail('VALIDATION_ERROR', 'Duplicate page request ID')
+    this.activeIds.add(id)
+  }
+  /** Time left of a page request that may have waited in the queue. */
+  private remaining(received: number, timeout: number): number {
+    const left = timeout - (Date.now() - received)
+    if (left <= 0) throw fail('TIMEOUT', 'Page request expired in the queue')
+    return left
   }
   protected async handle(v: Record<string, unknown>): Promise<void> {
     const id = String(v.id)
     const epoch = this.epoch
+    const received = Date.now()
+    const current = () =>
+      epoch === this.epoch && !this.stopped && !this.suspended
     let admitted = false
     try {
       this.admit(id)
-      this.active++
       admitted = true
       if (v.type === 'hello') {
         if (
@@ -169,8 +174,6 @@ export class IsolatedBridge extends PagePeer implements PageBridge {
           if (changedSession) {
             for (const service of serviceHosts.get(this)?.values() ?? [])
               service.reset()
-            this.seen.clear()
-            this.seen.add(id)
             this.clearSubscriptions()
           }
           const changed =
@@ -208,27 +211,29 @@ export class IsolatedBridge extends PagePeer implements PageBridge {
             return
           this.respond(id, undefined)
         }
-        const updated = this.updates.catch(() => {}).then(task)
-        this.updates = updated
-        await updated
+        await serialize(this.page.document, task)
         return
       }
       if (v.session !== this.session) return
       if (v.type === 'service') {
         const service = serviceHosts.get(this)?.get(String(v.name))
         if (!service) throw fail('ACCESS_DENIED', 'Page service is not exposed')
-        const value = await deadline(
-          service.request(v.data, (data) => {
-            this.checkOrigin()
-            if (epoch === this.epoch && !this.stopped && !this.suspended)
-              this.emit('service-event', crypto.randomUUID(), {
-                name: v.name,
-                data,
-              })
-          }),
-          Date.now() + DEFAULT_TIMEOUT,
-          this.cancellations
-        )
+        const value = await serialize(this.page.document, async () => {
+          if (!current())
+            throw fail('TRANSPORT_CLOSED', 'Page bridge disconnected')
+          return await deadline(
+            service.request(v.data, (data) => {
+              this.checkOrigin()
+              if (current())
+                this.emit('service-event', crypto.randomUUID(), {
+                  name: v.name,
+                  data,
+                })
+            }),
+            Date.now() + this.remaining(received, DEFAULT_TIMEOUT),
+            this.cancellations
+          )
+        })
         this.checkOrigin()
         if (epoch === this.epoch && !this.stopped && !this.suspended)
           this.respond(id, value)
@@ -262,18 +267,24 @@ export class IsolatedBridge extends PagePeer implements PageBridge {
           timeout > 2147483647
         )
           throw fail('INVALID_ARGUMENT', 'Invalid page timeout')
-        const value = await deadline(
-          this.hub.send(
-            v.name,
-            v.data,
-            { target: rule.target!, timeoutMs: timeout },
-            v.mode as 'send' | 'notify',
-            this.cancellations,
-            true
-          ),
-          Date.now() + timeout,
-          this.cancellations
-        )
+        const messageName = v.name
+        const value = await serialize(this.page.document, async () => {
+          if (!current())
+            throw fail('TRANSPORT_CLOSED', 'Page bridge disconnected')
+          const left = this.remaining(received, timeout)
+          return await deadline(
+            this.hub.send(
+              messageName,
+              v.data,
+              { target: rule.target!, timeoutMs: left },
+              v.mode as 'send' | 'notify',
+              this.cancellations,
+              true
+            ),
+            Date.now() + left,
+            this.cancellations
+          )
+        })
         validate(rule, 'validateResponse', value)
         if (epoch === this.epoch && !this.stopped && !this.suspended)
           this.respond(id, value)
@@ -290,7 +301,7 @@ export class IsolatedBridge extends PagePeer implements PageBridge {
         }
       }
     } finally {
-      if (admitted) this.active--
+      if (admitted) this.activeIds.delete(id)
     }
   }
   private clearSubscriptions(): void {
@@ -306,7 +317,6 @@ export class IsolatedBridge extends PagePeer implements PageBridge {
   }
   protected resume(): void {
     this.session = ''
-    this.seen.clear()
   }
   override dispose(): void {
     if (this.stopped) return

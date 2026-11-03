@@ -44,6 +44,8 @@ class Surface extends PageEnvironment {
 }
 type Messages = {
   echo: { data: number; response: number }
+  text: { data: string; response: string }
+  any: { data: unknown; response: unknown }
   title: { data: void; response: string }
   nothing: { data: void; response: void }
   denied: { data: void; response: void }
@@ -51,6 +53,7 @@ type Messages = {
 const number = (v: unknown): v is number => typeof v === 'number'
 const string = (v: unknown): v is string => typeof v === 'string'
 const none = (v: unknown): v is void => v === undefined
+const anything = (_: unknown): _ is unknown => true
 function policy(): RuntimePolicy {
   return {
     channel: 'public',
@@ -66,14 +69,21 @@ function policy(): RuntimePolicy {
         validateData: none,
         validateResponse: none,
       },
+      text: {
+        target: { context: 'background' },
+        validateData: string,
+        validateResponse: string,
+      },
+      any: {
+        target: { context: 'background' },
+        validateData: anything,
+        validateResponse: anything,
+      },
     },
     toPage: { title: { validateData: none, validateResponse: string } },
   }
 }
-function setup(
-  options = policy(),
-  mainLimits?: import('../src/messaging/types').PageBridgeLimits
-) {
+function setup(options = policy()) {
   const bus = new NativeBus()
   const bg = new MessageHub(bus.realm('background').env)
   const stop = bg.startBackground()
@@ -86,7 +96,7 @@ function setup(
   const realm = new MessageHub(isolated.env)
   const page = new Surface()
   const bridge = new IsolatedBridge(realm, options, page)
-  const main = PageClient.create<Messages>('public', page, mainLimits)
+  const main = PageClient.create<Messages>('public', page)
   const owners: object[] = []
   function on(
     key: string,
@@ -202,13 +212,7 @@ describe('MAIN bridge', () => {
   })
 
   test('parallel out of order responses correlate correctly', async () => {
-    const s = setup(
-      {
-        ...policy(),
-        limits: { maxPending: 128, requestsPerMinute: 150 },
-      },
-      { maxPending: 128 }
-    )
+    const s = setup()
     s.on('echo', async (v) => {
       await new Promise((r) => setTimeout(r, (100 - Number(v)) % 10))
       return v
@@ -338,29 +342,19 @@ describe('MAIN bridge', () => {
     }
   })
 
-  test('malformed and oversized JSON, UTF8 size, depth and prototype keys are rejected', async () => {
+  test('malformed JSON and prototype keys are rejected; size and depth follow the common JSON contract', async () => {
     const s = setup()
-    let calls = 0
-    s.on('echo', (v) => {
-      calls++
-      return v
-    })
+    const received: unknown[] = []
+    for (const key of ['echo', 'text', 'any'])
+      s.on(key, (v) => {
+        received.push(v)
+        return v
+      })
     try {
       await s.main.ready()
       const session = String(s.page.packets[0]!.value.session)
-      for (const detail of [
-        {},
-        '{',
-        'x'.repeat(65537),
-        JSON.stringify(
-          packet('unicode', session, { data: 'あ'.repeat(23000) })
-        ),
-        '{"__proto__":{"polluted":true}}',
-      ])
-        s.page.raw({}, detail)
-      let deep: unknown = 1
-      for (let i = 0; i < 33; i++) deep = { a: deep }
-      s.page.raw(packet('depth', session, { data: deep }))
+      for (const detail of [{}, '{', 'x'.repeat(65537)]) s.page.raw({}, detail)
+      s.page.raw({}, '{"__proto__":{"polluted":true}}')
       s.page.raw(packet('version', session, { version: 2 }))
       s.page.raw(
         packet('prototype', session, {
@@ -368,19 +362,74 @@ describe('MAIN bridge', () => {
         })
       )
       await tick()
-      expect(calls).toBe(0)
+      expect(received).toEqual([])
+      // No bridge-specific size limit: 200 KB of text is delivered.
+      const large = 'あ'.repeat(70000)
+      expect(await s.main.send('text', large)).toBe(large)
+      // Very deep data never overflows the stack. The common messaging JSON
+      // contract (depth 64, 1 MiB) still applies before reaching the Background.
+      const depth = 100000
+      const raw = JSON.stringify(packet('deep', session, { name: 'any' }))
+      s.page.raw(
+        {},
+        raw.replace(
+          '"data":1',
+          `"data":${'['.repeat(depth)}1${']'.repeat(depth)}`
+        )
+      )
+      await tick()
+      // Depending on the engine, JSON.parse either parses it (then messaging
+      // rejects it) or throws (then it is dropped). Neither path overflows.
+      const reply = s.page.packets.find(
+        (p) => p.value.id === 'deep' && p.value.type === 'reply'
+      )
+      if (reply)
+        expect(reply.value).toMatchObject({
+          ok: false,
+          error: { code: 'SERIALIZATION_ERROR' },
+        })
+      await expect(
+        s.main.send('text', 'x'.repeat(1048577))
+      ).rejects.toMatchObject({ code: 'SERIALIZATION_ERROR' })
+      expect(received).toEqual([large])
       expect(await s.main.send('echo', 4)).toBe(4)
     } finally {
       await s.cleanup()
     }
   })
 
-  test('replayed request ID and document rate limit reject before dispatch', async () => {
-    const s = setup({ ...policy(), limits: { requestsPerMinute: 4 } })
-    let calls = 0
-    s.on('echo', (v) => {
-      calls++
+  test('page requests run one at a time per document without a rate limit', async () => {
+    const s = setup()
+    let running = 0
+    let peak = 0
+    s.on('echo', async (v) => {
+      running++
+      peak = Math.max(peak, running)
+      await new Promise((r) => setTimeout(r, 1))
+      running--
       return v
+    })
+    try {
+      await s.main.ready()
+      const values = await Promise.all(
+        Array.from({ length: 300 }, (_, i) => s.main.send('echo', i))
+      )
+      expect(values).toEqual(Array.from({ length: 300 }, (_, i) => i))
+      expect(peak).toBe(1)
+    } finally {
+      await s.cleanup()
+    }
+  })
+
+  test('a reused in-flight request ID is rejected', async () => {
+    const s = setup()
+    let calls = 0
+    let finish!: (v: unknown) => void
+    s.on('echo', () => {
+      calls++
+      return new Promise((r) => {
+        finish = r
+      })
     })
     try {
       await s.main.ready()
@@ -390,37 +439,42 @@ describe('MAIN bridge', () => {
       s.page.raw(packet('once', session))
       await tick()
       expect(calls).toBe(1)
-      await s.main.send('echo', 1)
-      await s.main.send('echo', 2)
-      await expect(s.main.send('echo', 3)).rejects.toMatchObject({
-        code: 'QUOTA_EXCEEDED',
-      })
-      expect(calls).toBe(3)
+      expect(
+        s.page.packets.find((p) => p.value.id === 'once')?.value
+      ).toMatchObject({ ok: false, error: { code: 'VALIDATION_ERROR' } })
+      finish(1)
+      await tick()
+      // The ID can be used again once the first request finished.
+      s.page.raw(packet('once', session))
+      await tick()
+      expect(calls).toBe(2)
+      finish(1)
     } finally {
       await s.cleanup()
     }
   })
 
-  test('pending limit, timeout and late responses release pending entries', async () => {
-    const s = setup({ ...policy(), limits: { maxPending: 1 } })
+  test('queued requests expire without reaching the Background', async () => {
+    const s = setup()
+    let calls = 0
     let finish!: (v: unknown) => void
-    s.on(
-      'echo',
-      () =>
-        new Promise((r) => {
-          finish = r
-        })
-    )
+    s.on('echo', () => {
+      calls++
+      return new Promise((r) => {
+        finish = r
+      })
+    })
     try {
       await s.main.ready()
-      const pending = s.main.send('echo', 1, { timeoutMs: 40 })
+      const first = s.main.send('echo', 1, { timeoutMs: 1000 })
       await tick()
-      await expect(s.main.send('echo', 2)).rejects.toMatchObject({
-        code: 'QUOTA_EXCEEDED',
-      })
-      await expect(pending).rejects.toMatchObject({ code: 'TIMEOUT' })
+      await expect(
+        s.main.send('echo', 2, { timeoutMs: 30 })
+      ).rejects.toMatchObject({ code: 'TIMEOUT' })
       finish(1)
+      expect(await first).toBe(1)
       await tick()
+      expect(calls).toBe(1)
       expect(
         (s.bridge as unknown as { pending: Map<string, unknown> }).pending.size
       ).toBe(0)
@@ -645,15 +699,6 @@ test('unauthorized handlers, invalid policies and duplicate channels fail closed
       () =>
         new IsolatedBridge(s.realm, invalid as unknown as RuntimePolicy, s.page)
     ).toThrow()
-    for (const value of [0, -1, Infinity, NaN, 1.5])
-      expect(
-        () =>
-          new IsolatedBridge(
-            s.realm,
-            { ...policy(), limits: { maxPending: value } },
-            s.page
-          )
-      ).toThrow()
   } finally {
     await s.cleanup()
   }
