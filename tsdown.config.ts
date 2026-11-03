@@ -5,7 +5,7 @@ export default defineConfig({
     index: 'src/index.ts',
     'context/index': 'src/context/index.ts',
     'popout/index': 'src/popout/index.ts',
-    'sidePanel/index': 'src/sidePanel/index.ts',
+    'side-panel/index': 'src/side-panel/index.ts',
     'storage/index': 'src/storage/index.ts',
     'messaging/index': 'src/messaging/index.ts',
   },

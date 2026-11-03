@@ -1,7 +1,7 @@
 import type { PopoutHandle } from '../../src/popout'
 
 import { webextContext } from '../../src/context'
-import { nativeMethod, object } from '../../src/internal/native'
+import { nativeMethod, object } from '../../src/internal/browser'
 import {
   POPOUT_KEY_PREFIX,
   POPOUT_PARAM,
@@ -97,26 +97,17 @@ async function run() {
       (await nativeMethod('action', 'getPopup')!({ tabId: source })) ===
         first.page
     )
-    const firefox = !!nativeMethod('sidebarAction', 'getPanel')
-    if (firefox)
-      await call(['action', 'setPopup'], {
-        windowId: b.windowId,
-        popup: 'ui.html?mode=window',
-      })
-    else await call(['tabs', 'update'], source, { active: true })
+    // A window is resolved to its active tab in every browser.
+    await call(['tabs', 'update'], source, { active: true })
     const windowSource = await webextPopout.open({
       source: 'popup',
       sourceTarget: { windowId: b.windowId as number },
     })
-    const expected = await nativeMethod('action', 'getPopup')!(
-      firefox ? { windowId: b.windowId } : { tabId: source }
-    )
+    const expected = await nativeMethod('action', 'getPopup')!({
+      tabId: source,
+    })
     assert(windowSource.page === expected)
-    assert(
-      firefox
-        ? windowSource.sourceTarget?.windowId === b.windowId
-        : windowSource.sourceTarget?.tabId === source
-    )
+    assert(windowSource.sourceTarget?.tabId === source)
     await windowSource.close()
   })
   await test('same HTML self identity and getCurrent via internal RPC', async () => {
@@ -154,7 +145,7 @@ async function run() {
     await other.close()
   })
   await test('sidebar native discovery and independent instance', async () => {
-    panel = await webextPopout.open({ source: 'sidePanel' })
+    panel = await webextPopout.open({ source: 'side-panel' })
     assert(panel.page.endsWith('/panel.html'))
     const report = await wait(() =>
       reports.find((r) => r.windowId === panel.windowId)
@@ -246,7 +237,7 @@ async function run() {
     for (const opts of [
       { source: 'popup', page: 'https://example.com' },
       { source: 'popup', page: `ui.html?${POPOUT_PARAM}=forged` },
-      { source: 'sidePanel', reuseKey: 'first' },
+      { source: 'side-panel', reuseKey: 'first' },
     ]) {
       try {
         await webextPopout.open(opts as never)

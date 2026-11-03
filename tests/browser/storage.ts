@@ -1,7 +1,7 @@
-import { nativeMethod } from '../../src/internal/native'
+import { nativeMethod, object } from '../../src/internal/browser'
 import { webextMessaging } from '../../src/messaging'
 import { webextStorage } from '../../src/storage'
-import { JOURNAL, META } from '../../src/storage/common'
+import { JOURNAL, META } from '../../src/storage/utils'
 import { bridgeResult } from './bridge'
 import { testOrigin } from './report'
 
@@ -60,42 +60,32 @@ export function storageBackground(): Promise<void> {
       }
     })
     await bridgeResult('storage:prototype-keys', async () => {
+      // Firefox storage.session cannot read back a top-level "toString", so
+      // every browser rejects such keys and accepts them inside a namespace.
       for (const area of ['local', 'sync', 'session'] as const) {
         const storage = webextStorage<{
           'fixture.intrinsic.toString': string
           toString: string
         }>({ area })
-        for (const key of ['fixture.intrinsic.toString', 'toString'] as const) {
+        try {
+          await storage.set('toString', area)
+          throw Error(`${area}.toString: expected rejection`)
+        } catch (error) {
           check(
-            (await storage.get(key)) === undefined,
-            `${area}.${key}: initial`
-          )
-          await storage.set(key, area)
-          const actual = await storage.get(key)
-          if (actual !== area) {
-            // Keep a failing regression visible even when the native API also
-            // loses the key. Do not accept this as a successful library read.
-            await nativeMethod('storage', area, 'set')?.({ [key]: area })
-            const raw = await nativeMethod('storage', area, 'get')?.(null)
-            const nativeKeys = await nativeMethod(
-              'storage',
-              area,
-              'getKeys'
-            )?.()
-            throw Error(
-              `${area}.${key}: saved ${JSON.stringify(actual)}, native ${JSON.stringify(raw)}, keys ${JSON.stringify(nativeKeys)}`
-            )
-          }
-          check(
-            actual === area,
-            `${area}.${key}: saved ${JSON.stringify(actual)}`
-          )
-          await storage.remove(key)
-          check(
-            (await storage.get(key)) === undefined,
-            `${area}.${key}: removed`
+            object(error)?.code === 'INVALID_ARGUMENT',
+            `${area}.toString: ${String(error)}`
           )
         }
+        const key = 'fixture.intrinsic.toString'
+        check((await storage.get(key)) === undefined, `${area}.${key}: initial`)
+        await storage.set(key, area)
+        const actual = await storage.get(key)
+        check(
+          actual === area,
+          `${area}.${key}: saved ${JSON.stringify(actual)}`
+        )
+        await storage.remove(key)
+        check((await storage.get(key)) === undefined, `${area}.${key}: removed`)
       }
     })
     await bridgeResult('storage:native-watch', async () => {

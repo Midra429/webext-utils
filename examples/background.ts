@@ -3,13 +3,21 @@ import type { Messages, Schema } from './shared'
 import {
   webextMessaging,
   webextPopout,
+  webextSidePanel,
   webextStorage,
 } from '@midra/webext-utils'
 
-// Register event handlers before the first await on every Background start.
+// Register everything before the first await, on every Background start.
 webextMessaging.startBackground()
 webextStorage.startBackground()
 webextPopout.startBackground()
+webextSidePanel.startBackground()
+webextSidePanel.onOpened(({ windowId }) =>
+  console.log('panel opened', windowId)
+)
+webextSidePanel.onClosed(({ windowId }) =>
+  console.log('panel closed', windowId)
+)
 const messaging = webextMessaging<Messages>()
 const settings = webextStorage<Schema>().namespace('settings')
 messaging.on('settings:theme', async () => {

@@ -1,12 +1,16 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 // Only isolated profiles and the extension fixture created here are controlled.
 const root = resolve(import.meta.dir, '..')
 const firefox = process.argv.includes('--firefox')
 const manual = process.argv.includes('--manual')
-const temp = await mkdtemp('/private/tmp/webext-side-panel-')
-const profile = await mkdtemp('/private/tmp/webext-side-profile-')
+const temp = await mkdtemp(join(tmpdir(), 'webext-side-panel-'))
+const profile = await mkdtemp(join(tmpdir(), 'webext-side-profile-'))
+// Two automatic reports, then one report per clicked step.
+const STEPS = 11
+const REPORTS = STEPS + 2
 let readyStep = -1
 const results: { name: string; passed: boolean; error?: string }[] = []
 const server = Bun.serve({
@@ -70,11 +74,17 @@ async function poll<T>(read: () => Promise<T | undefined>): Promise<T> {
     if (value !== undefined) return value
     await new Promise((resolve) => setTimeout(resolve, 100))
   }
-  throw new Error(`Side panel test timeout (${results.length}/12 reports)`)
+  throw new Error(
+    `Side panel test timeout (${results.length}/${REPORTS} reports)`
+  )
 }
 try {
   const build = await Bun.build({
-    entrypoints: [join(root, 'tests/browser/sidePanel.ts')],
+    entrypoints: [
+      join(root, 'tests/browser/side-panel.ts'),
+      join(root, 'tests/browser/side-panel-page.ts'),
+      join(root, 'tests/browser/side-panel-background.ts'),
+    ],
     outdir: temp,
     target: 'browser',
     format: 'iife',
@@ -83,15 +93,11 @@ try {
   if (!build.success) throw new Error(String(build.logs))
   await writeFile(
     join(temp, 'test.html'),
-    '<!doctype html><html lang="en"><meta charset="utf-8"><title>Side panel fixture</title><body><script src="sidePanel.js" defer></script>'
+    '<!doctype html><html lang="en"><meta charset="utf-8"><title>Side panel fixture</title><body><script src="side-panel.js" defer></script>'
   )
   await writeFile(
     join(temp, 'panel.html'),
-    '<!doctype html><title>Panel fixture</title><p>Native side panel</p>'
-  )
-  await writeFile(
-    join(temp, 'background.js'),
-    `const api = globalThis.browser ?? chrome; api.tabs.create({url:api.runtime.getURL('test.html')})`
+    '<!doctype html><title>Panel fixture</title><p>Native side panel</p><script src="side-panel-page.js"></script>'
   )
   await writeFile(
     join(temp, 'manifest.json'),
@@ -99,7 +105,7 @@ try {
       manifest_version: 3,
       name: 'webext-utils side panel test',
       version: '0.0.1',
-      permissions: firefox ? [] : ['sidePanel'],
+      permissions: firefox ? ['storage'] : ['storage', 'sidePanel'],
       host_permissions: ['http://127.0.0.1/*'],
       action: {},
       ...(firefox
@@ -110,7 +116,7 @@ try {
                 strict_min_version: '145.0',
               },
             },
-            background: { scripts: ['background.js'] },
+            background: { scripts: ['side-panel-background.js'] },
             sidebar_action: {
               default_panel: 'panel.html',
               default_title: 'Fixture',
@@ -119,7 +125,7 @@ try {
           }
         : {
             minimum_chrome_version: '142',
-            background: { service_worker: 'background.js' },
+            background: { service_worker: 'side-panel-background.js' },
             side_panel: { default_path: 'panel.html' },
           }),
     })
@@ -225,10 +231,10 @@ user_pref("browser.aboutwelcome.enabled", false);
     })
     if (manual) {
       console.log(
-        'Click the visible fixture button for each of the ten steps. No privileged WebDriver access is enabled.'
+        'Click the visible fixture button for each step. No privileged WebDriver access is enabled.'
       )
     } else {
-      for (let step = 0; step < 10; step++) {
+      for (let step = 0; step < STEPS; step++) {
         await poll(async () => (readyStep === step ? true : undefined))
         const element = (await webdriver(`/session/${sessionId}/element`, {
           using: 'css selector',
@@ -244,7 +250,7 @@ user_pref("browser.aboutwelcome.enabled", false);
         await webdriver(`/session/${sessionId}/element/${id}/click`, {})
       }
     }
-    await poll(async () => (results.length === 12 ? true : undefined))
+    await poll(async () => (results.length === REPORTS ? true : undefined))
   } else {
     browser = Bun.spawn(
       [
@@ -256,6 +262,8 @@ user_pref("browser.aboutwelcome.enabled", false);
         '--no-first-run',
         '--no-default-browser-check',
         `--load-extension=${temp}`,
+        // Extra flags, e.g. CHROME_FLAGS='--no-sandbox' when running as root.
+        ...(process.env.CHROME_FLAGS?.split(' ').filter(Boolean) ?? []),
         'about:blank',
       ],
       { stdout: 'inherit', stderr: 'inherit' }
@@ -319,7 +327,7 @@ user_pref("browser.aboutwelcome.enabled", false);
     browserInfo = await send('Browser.getVersion')
     console.log(JSON.stringify({ browser: browserInfo }))
     await send('Page.bringToFront')
-    for (let step = 0; step < 10; step++) {
+    for (let step = 0; step < STEPS; step++) {
       await poll(async () =>
         (await evaluate(
           `document.querySelector('button')?.dataset.step === '${step}' && !document.querySelector('button').disabled`
@@ -344,7 +352,7 @@ user_pref("browser.aboutwelcome.enabled", false);
         clickCount: 1,
       })
     }
-    await poll(async () => (results.length === 12 ? true : undefined))
+    await poll(async () => (results.length === REPORTS ? true : undefined))
   }
   const failed = results.filter((result) => !result.passed)
   if (failed.length) throw new Error(`${failed.length} side panel tests failed`)

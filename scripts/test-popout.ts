@@ -1,4 +1,5 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 // Only isolated profiles and the extension fixture created here are controlled.
@@ -6,8 +7,8 @@ const root = resolve(import.meta.dir, '..')
 const firefox = process.argv.includes('--firefox')
 const manual = process.argv.includes('--manual')
 const PORT_NUMBER = /^\d+$/
-const temp = await mkdtemp('/private/tmp/webext-popout-')
-const profile = await mkdtemp('/private/tmp/webext-popout-profile-')
+const temp = await mkdtemp(join(tmpdir(), 'webext-popout-'))
+const profile = await mkdtemp(join(tmpdir(), 'webext-popout-profile-'))
 const results: { name: string; passed: boolean; error?: string }[] = []
 const server = Bun.serve({
   hostname: '127.0.0.1',
@@ -236,6 +237,8 @@ user_pref("browser.aboutwelcome.enabled", false);
         '--no-first-run',
         '--no-default-browser-check',
         `--load-extension=${temp}`,
+        // Extra flags, e.g. CHROME_FLAGS='--no-sandbox' when running as root.
+        ...(process.env.CHROME_FLAGS?.split(' ').filter(Boolean) ?? []),
         'about:blank',
       ],
       { stdout: 'inherit', stderr: 'inherit' }

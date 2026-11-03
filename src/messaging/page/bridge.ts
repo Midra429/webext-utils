@@ -1,10 +1,10 @@
-import type { Realm } from './realm'
-import type { MessageTarget, PageBridge, PageBridgeOptions } from './types'
+import type { MessageHub } from '../hub'
+import type { MessageTarget, PageBridge, PageBridgeOptions } from '../types'
 
-import { PagePeer } from './page-peer'
-import { serviceHosts } from './page-services'
-import { PageEnvironment, channel, limits } from './page-wire'
-import { DEFAULT_TIMEOUT, deadline, fail, name, target } from './protocol'
+import { DEFAULT_TIMEOUT, deadline, fail, name, target } from '../protocol'
+import { PagePeer } from './peer'
+import { serviceHosts } from './services'
+import { PageEnvironment, channel, limits } from './wire'
 
 type Rule = {
   target?: MessageTarget
@@ -61,7 +61,7 @@ function sameTarget(a: unknown, b: MessageTarget): boolean {
 }
 
 export class IsolatedBridge extends PagePeer implements PageBridge {
-  private proxy: Realm
+  private proxy: MessageHub
   private owner = {}
   private subscriptions: (() => void)[] = []
   private seen = new Set<string>()
@@ -70,14 +70,14 @@ export class IsolatedBridge extends PagePeer implements PageBridge {
   private updates: Promise<void> = Promise.resolve()
   private policy: RuntimePolicy
   constructor(
-    private realm: Realm,
+    private hub: MessageHub,
     options: RuntimePolicy,
     page = new PageEnvironment(),
     private removed = () => {}
   ) {
     super(options.channel, page, limits(options.limits), true)
     channel(options.channel)
-    this.proxy = realm.pageRealm()
+    this.proxy = hub.pageHub()
     // Copy policy maps/targets: subsequent caller mutation cannot widen authority.
     const copy = (rules: Record<string, Rule>, outbound: boolean) => {
       const result = Object.create(null) as Record<string, Rule>
@@ -263,7 +263,7 @@ export class IsolatedBridge extends PagePeer implements PageBridge {
         )
           throw fail('INVALID_ARGUMENT', 'Invalid page timeout')
         const value = await deadline(
-          this.realm.send(
+          this.hub.send(
             v.name,
             v.data,
             { target: rule.target!, timeoutMs: timeout },

@@ -1,4 +1,4 @@
-import { object } from '../internal/native'
+import { object } from '../internal/browser'
 import { fail } from './protocol'
 
 export interface Port {

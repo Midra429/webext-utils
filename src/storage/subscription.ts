@@ -1,8 +1,8 @@
-import type { Unsubscribe } from '../internal/errors'
+import type { Unsubscribe } from '../internal/types'
 import type { StorageSubscription, StorageWatchOptions } from './types'
 
 import { WebextError, nativeError } from '../internal/errors'
-import { fail } from './common'
+import { fail } from './utils'
 
 /** Callable for compatibility, with an observable registration boundary. */
 export function subscription(

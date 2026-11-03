@@ -1,16 +1,16 @@
-import type { RuntimePolicy } from '../src/messaging/page-bridge'
+import type { RuntimePolicy } from '../src/messaging/page/bridge'
 import type { MessageSender, MessageTarget } from '../src/messaging/types'
 
 import { describe, expect, test } from 'bun:test'
 
-import { IsolatedBridge } from '../src/messaging/page-bridge'
-import { PageClient } from '../src/messaging/page-client'
+import { MessageHub } from '../src/messaging/hub'
+import { IsolatedBridge } from '../src/messaging/page/bridge'
+import { PageClient } from '../src/messaging/page/client'
 import {
   PAGE_PROTOCOL,
   PageEnvironment,
   eventName,
-} from '../src/messaging/page-wire'
-import { Realm } from '../src/messaging/realm'
+} from '../src/messaging/page/wire'
 import { NativeBus } from './helpers/messaging-native'
 
 class Surface extends PageEnvironment {
@@ -75,7 +75,7 @@ function setup(
   mainLimits?: import('../src/messaging/types').PageBridgeLimits
 ) {
   const bus = new NativeBus()
-  const bg = new Realm(bus.realm('background').env)
+  const bg = new MessageHub(bus.realm('background').env)
   const stop = bg.startBackground()
   const isolated = bus.realm('content-script', {
     tab: { id: 7, windowId: 2 },
@@ -83,7 +83,7 @@ function setup(
     documentId: 'doc',
     url: 'https://example.com/page',
   })
-  const realm = new Realm(isolated.env)
+  const realm = new MessageHub(isolated.env)
   const page = new Surface()
   const bridge = new IsolatedBridge(realm, options, page)
   const main = PageClient.create<Messages>('public', page, mainLimits)
@@ -162,7 +162,9 @@ describe('MAIN bridge', () => {
           new Set()
         )
       ).toBe('page title')
-      const view = new Realm(s.bus.realm('popup', { documentId: 'view' }).env)
+      const view = new MessageHub(
+        s.bus.realm('popup', { documentId: 'view' }).env
+      )
       expect(
         await view.send(
           'title',
@@ -299,7 +301,7 @@ describe('MAIN bridge', () => {
 
   test('deny opaque, non-http, foreign and changed origins', async () => {
     const bus = new NativeBus()
-    const realm = new Realm(bus.realm('content-script').env)
+    const realm = new MessageHub(bus.realm('content-script').env)
     for (const actual of [
       'null',
       'file:///page',
@@ -313,7 +315,7 @@ describe('MAIN bridge', () => {
     expect(
       () =>
         new IsolatedBridge(
-          new Realm(bus.realm('popup').env),
+          new MessageHub(bus.realm('popup').env),
           policy(),
           new Surface()
         )
@@ -565,7 +567,7 @@ test('MAIN proxy recovers after router restart without an idle reconnect', async
     router.stop()
     await tick()
     expect(s.bus.connects).toBe(connects)
-    const restarted = new Realm(s.bus.background!.env)
+    const restarted = new MessageHub(s.bus.background!.env)
     const stop = restarted.startBackground()
     try {
       expect(
@@ -704,7 +706,7 @@ test('8 by 8 routing matrix includes MAIN with fixed policies in both directions
   const page = PageClient.create<
     Record<string, { data: string; response: string }>
   >('public', s.page)
-  const realms = new Map<string, Realm>([
+  const realms = new Map<string, MessageHub>([
     ['background', s.bg],
     ['content-script', s.realm],
   ])
@@ -721,7 +723,9 @@ test('8 by 8 routing matrix includes MAIN with fixed policies in both directions
       } else {
         let realm = realms.get(context)
         if (!realm) {
-          realm = new Realm(s.bus.realm(context, { documentId: context }).env)
+          realm = new MessageHub(
+            s.bus.realm(context, { documentId: context }).env
+          )
           realms.set(context, realm)
         }
         off.push(
@@ -765,7 +769,7 @@ test('independent documents never share a page transport or borrow frame identit
     frameId: 1,
     documentId: 'iframe',
   })
-  const realm = new Realm(frame.env),
+  const realm = new MessageHub(frame.env),
     surface = new Surface()
   const bridge = new IsolatedBridge(realm, policy(), surface)
   const page = PageClient.create<Messages>('public', surface)

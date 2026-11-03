@@ -9,11 +9,11 @@ import type {
   StorageWatchOptions,
 } from './types'
 
+import { object } from '../internal/browser'
 import { assertJson } from '../internal/json'
-import { object } from '../internal/native'
-import { clone, fail, key, keys } from './common'
-import { PageStorage, expose } from './page'
+import { PageStorage, expose } from './page-bridge'
 import { StorageRuntime } from './runtime'
+import { clone, fail, join, key, keys, segments } from './utils'
 
 // No native globals, listeners or transports are touched by factory creation.
 let shared: StorageRuntime | undefined
@@ -29,12 +29,12 @@ export function createStorage<S>(
     throw fail('INVALID_ARGUMENT', 'Invalid storage area')
   const validators = { ...options.validate } as Record<
     string,
-    (value: unknown) => unknown
+    (value: unknown) => boolean
   >
   for (const [k, fn] of Object.entries(validators)) {
     key(k)
     if (typeof fn !== 'function')
-      throw fail('INVALID_ARGUMENT', 'Invalid storage parser')
+      throw fail('INVALID_ARGUMENT', 'Invalid storage validator')
   }
   const bridge = options.bridge
     ? new PageStorage(options.bridge.channel, options.bridge.limits)
@@ -43,17 +43,17 @@ export function createStorage<S>(
     if (value === undefined) return undefined
     const input = clone(value)
     if (!Object.hasOwn(validators, k)) return input
+    let valid = false
     try {
-      return clone(validators[k]!(input))
+      valid = validators[k]!(input) === true
     } catch (cause) {
-      throw fail('VALIDATION_ERROR', `Storage parser failed: ${k}`, cause)
+      throw fail('VALIDATION_ERROR', `Storage validator failed: ${k}`, cause)
     }
+    if (!valid) throw fail('VALIDATION_ERROR', `Storage value is invalid: ${k}`)
+    return input
   }
   function store(prefix: string): StorageClient<S> {
-    const full = (k: string) => {
-      key(k)
-      return prefix ? `${prefix}.${k}` : k
-    }
+    const full = (k: string) => join(prefix, k)
     const execute = async (
       op: 'get' | 'set' | 'remove',
       names: string[],
@@ -142,7 +142,10 @@ export function createStorage<S>(
           throw fail('INVALID_ARGUMENT', 'Expected storage keys')
         await execute('remove', names.map(full))
       },
-      namespace: (p: string) => store(full(p)),
+      namespace: (p: string) => {
+        segments(p)
+        return store(prefix ? `${prefix}.${p}` : p)
+      },
       watch: (
         k: string,
         cb: (change: unknown) => void,

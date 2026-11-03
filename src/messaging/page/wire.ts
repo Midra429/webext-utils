@@ -1,8 +1,8 @@
-import type { PageBridgeLimits } from './types'
+import type { PageBridgeLimits } from '../types'
 
-import { assertJson } from '../internal/json'
-import { object } from '../internal/native'
-import { fail } from './protocol'
+import { object } from '../../internal/browser'
+import { assertJson } from '../../internal/json'
+import { fail } from '../protocol'
 
 export const PAGE_PROTOCOL = '@midra/webext-utils/page'
 export const defaults = {

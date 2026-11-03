@@ -1,10 +1,10 @@
-import type { WebextError } from '../internal/errors'
-import type { Limits, PageEnvironment } from './page-wire'
+import type { WebextError } from '../../internal/errors'
+import type { Limits, PageEnvironment } from './wire'
 
-import { nativeError } from '../internal/errors'
-import { object } from '../internal/native'
-import { PAGE_PROTOCOL, decode, encode, eventName } from './page-wire'
-import { DEFAULT_TIMEOUT, deadline, fail, reply, wire } from './protocol'
+import { object } from '../../internal/browser'
+import { nativeError } from '../../internal/errors'
+import { DEFAULT_TIMEOUT, deadline, fail, reply, wire } from '../protocol'
+import { PAGE_PROTOCOL, decode, encode, eventName } from './wire'
 
 export abstract class PagePeer {
   protected pending = new Map<

@@ -7,7 +7,7 @@ import {
   webextStorage,
 } from '@midra/webext-utils'
 
-import { nativeMethod } from '../../src/internal/native'
+import { nativeMethod } from '../../src/internal/browser'
 
 declare const TEST_ORIGIN: string
 
@@ -98,7 +98,7 @@ export function integrationBackground() {
       })
       const page = await webextSidePanel.getPage()
       ensure(page?.endsWith('/integrated.html'), `Panel page: ${page}`)
-      for (const source of ['popup', 'sidePanel'] as const) {
+      for (const source of ['popup', 'side-panel'] as const) {
         const handle = await webextPopout.open({
           source,
           associatedTabId: tabId,

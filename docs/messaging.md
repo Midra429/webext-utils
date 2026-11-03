@@ -1,85 +1,165 @@
-# webextMessaging
+# messaging
 
-段階C/Dの実装です。Chrome / Firefox MV3のコンテキスト間で、JSON互換データを単一の登録済み宛先へ送ります。MAINはISOLATEDで明示的な公開ポリシーを持つブリッジを設置して利用します。[MAIN worldガイド](main-world.md) を参照してください。実機検証状況は [testing.md](testing.md) を参照してください。
-
-## 初期化
-
-Background入口では、最初のawaitより前にルーターとハンドラーを登録します。importや通常factory作成だけではlistener・Portは増えません。bridge指定のMAIN factoryは明示的にDOM通信listenerを登録します。
+`webextMessaging` は、Background・Content Script・拡張機能のページ（ポップアップ・サイドパネル・popout・タブ）の間で、型付きのメッセージを送受信します。
 
 ```ts
 import { webextMessaging } from '@midra/webext-utils/messaging'
+```
 
+## 型の定義
+
+メッセージは `{ data: 送信データ; response: 応答 }` の形で定義します。
+
+```ts
+type Messages = {
+  'settings:get': { data: void; response: { theme: 'light' | 'dark' } }
+  'tab:highlight': { data: { selector: string }; response: boolean }
+  'ui:changed': { data: { theme: string }; response: void } // 通知
+}
+
+const messaging = webextMessaging<Messages>()
+```
+
+- `data` が `void`（または `undefined` を含む）なら、送信時にデータを省略できます。
+- `response` が `void` のメッセージは `notify` / `notifyAll` で送れます。
+
+型をすべてのファイルで共有する場合は、グローバルの `WebextMessages` を拡張します。型引数なしの `webextMessaging()` でも推論されます。
+
+```ts
 declare global {
   interface WebextMessages {
     'settings:get': { data: void; response: { theme: 'light' | 'dark' } }
-    'page:title': { data: void; response: string }
-    'ui:changed': { data: { theme: string }; response: void }
   }
 }
 
-const stopRouter = webextMessaging.startBackground()
-const messaging = webextMessaging()
-const stop = messaging.on('settings:get', () => ({ theme: 'dark' }))
+const messaging = webextMessaging() // WebextMessages の型を使う
 ```
 
-受信viewは `webextContext.resolve()`、または既知の入口での `webextContext.register()` により役割を確定させてからハンドラーを登録できます。同期判定で既知のコンテキストなら、追加初期化は不要です。`unknown` のままの操作は `CONTEXT_UNAVAILABLE` です。
+型引数とグローバル宣言の両方がある場合は統合され、同じ名前は型引数が優先されます。
+
+## 初期化
+
+Background では、最初の `await` より前にルーターを開始し、受信ハンドラーを登録します。
 
 ```ts
-const messaging = webextMessaging()
-const stop = messaging.on('page:title', () => document.title)
-await messaging.ready()
+// background.ts
+webextMessaging.startBackground()
 
-const settings = await messaging.send('settings:get')
-const title = await messaging.send('page:title', undefined, {
-  target: { context: 'content-script', tabId: 42, frameId: 0 },
+const messaging = webextMessaging<Messages>()
+messaging.on('settings:get', async () => ({ theme: 'dark' }))
+```
+
+Background 以外で受信する場合は、登録後に `ready()` で Background への登録完了を待ってから、送信側に知らせてください。
+
+```ts
+// content.ts
+const messaging = webextMessaging<Messages>()
+messaging.on('tab:highlight', ({ selector }) => {
+  return document.querySelector(selector) !== null
+})
+await messaging.ready()
+```
+
+Background 以外の受信には Manifest の `storage` 権限が必要です（Background の再起動後に受信先を復元するため）。
+
+## API
+
+| API | 説明 |
+| --- | --- |
+| `send(name, data?, options?)` | 送信して応答を受け取る |
+| `notify(name, data?, options?)` | 応答のない通知を送る（受信側の処理完了を待つ） |
+| `notifyAll(name, data, options)` | 宛先に一致するすべての受信側に通知し、配信結果を返す（`target` 必須） |
+| `on(name, handler)` | 受信ハンドラーを登録する。解除関数を返す |
+| `ready()` | 受信ハンドラーの登録完了を待つ |
+| `installPageBridge(options)` | MAIN world に公開するブリッジを設置する（[MAIN world](main-world.md)） |
+| `dispose()` | このクライアントのハンドラー・ブリッジ・待機中の処理をすべて解除する |
+| `webextMessaging.startBackground()` | Background でルーターを開始する |
+
+### `SendOptions`
+
+| オプション | 既定値 | 説明 |
+| --- | --- | --- |
+| `target` | `{ context: 'background' }` | 宛先 |
+| `timeoutMs` | `10000` | 応答を待つ時間（ミリ秒） |
+| `ignoreMissing` | `false` | `true` なら受信側がないとき例外ではなく `{ delivered: false }` を返す |
+
+```ts
+const result = await messaging.send('settings:get', undefined, {
+  ignoreMissing: true,
+})
+if (result.delivered) console.log(result.value.theme)
+```
+
+`ignoreMissing` が抑制するのは `NO_RECEIVER` だけです。タイムアウトやハンドラーの例外はそのまま投げます。
+
+## 宛先
+
+| 宛先 | 例 |
+| --- | --- |
+| Background | `{ context: 'background' }` |
+| Content Script | `{ context: 'content-script', tabId, frameId?, world?, documentId? }` |
+| 拡張機能のページ | `{ context: 'popup' \| 'side-panel' \| 'popout' \| 'options' \| 'extension-page' \| 'devtools', windowId?, tabId?, documentId? }` |
+
+- 条件はすべて AND で照合します。
+- Content Script の `world` の既定値は `ISOLATED`、`send` / `notify` の `frameId` の既定値は `0`（トップフレーム）です。`notifyAll` で `frameId` を省略すると全フレームに届きます。
+- 一致する受信側がない場合は `NO_RECEIVER`、`send` / `notify` で複数一致した場合は送信前に `AMBIGUOUS_TARGET` です。
+
+```ts
+// サイドパネルに送る
+await messaging.send('panel:refresh', undefined, {
+  target: { context: 'side-panel', windowId },
+})
+
+// タブ内のすべてのフレームに通知する
+const report = await messaging.notifyAll('ui:changed', { theme: 'dark' }, {
+  target: { context: 'content-script', tabId },
+})
+for (const result of report.results) {
+  if (!result.delivered) console.warn(result.instanceId, result.error.code)
+}
+```
+
+## 送信元
+
+受信ハンドラーの第2引数は送信元の情報（`MessageSender`）です。ブラウザが確認した値だけを含みます。
+
+```ts
+messaging.on('tab:highlight', (data, sender) => {
+  sender.context // 'background' | 'content-script' | 'extension-page'
+  sender.tabId // Content Script からの送信ならタブ ID
+  sender.trust // 'extension' | 'page'（MAIN world からの送信は 'page'）
+  return true
 })
 ```
 
-Background宛てだけなら `storage` 権限や常設Portは不要です。受信view・Content Scriptを登録する場合は、ルーターが `storage.session` に復旧用メタデータを保存するため、Manifestの `permissions: ['storage']` が必要です。session領域をContent Scriptへ開放する必要はありません。
+`trust: 'page'` の送信は Web ページと同じ信頼度です。権限の必要な処理を行う前に内容を検証してください。
 
-storageをContent ScriptやMAINから使う場合は、このルーター登録に続けて `webextStorage.startBackground()` を同期登録します。storageのRPC/監視は内部の予約メッセージ名を使用し、利用側の `WebextMessages` への追加は不要です。MAINのstorageは同じブリッジ通信路を共有し、ISOLATEDの `exposeToPage` でキー別に制限します。使用例は [storage API](storage.md)、検証範囲は [検証結果](testing.md) を参照してください。
+## 送受信できるデータ
 
-## 型とAPI
+JSON 互換の値（有限の数値・文字列・真偽値・`null`・配列・プレーンオブジェクト）だけを扱います。
 
-`webextMessaging<Override = {}>()` の有効な型は `Omit<WebextMessages, keyof Override> & Override` です。同名キーだけを置換し、グローバル専用キーは残します。グローバルが空なら任意名へは拡張しません。dataがvoidまたはundefinedを含む場合だけデータ引数を省略できます。
+- トップレベルの `undefined` は「データなし」として送れます。
+- `Date`・`Map`・`Set`・関数・循環参照・オブジェクト内の `undefined` などは `SERIALIZATION_ERROR` です（黙って変換しません）。
+- 1メッセージは深さ 64、要素数 100,000、UTF-8 で 1 MiB までです。
 
-| API | 契約 |
+## 寿命と再接続
+
+- 1つの JavaScript 環境（ページ・Content Script）につき1本の接続を共有します。同じ名前のハンドラーは1つだけ登録できます。
+- Background が停止・再起動しても、次の送信時に受信先を復元します。定期的な通信（heartbeat）はしません。
+- 送信中に失われた要求は自動で再送しません。解除やタイムアウトは、既に始まった処理を取り消しません。
+- ページを閉じるときは `dispose()` を呼ぶと、ハンドラーと待機中の処理をまとめて解除できます。
+
+## エラー
+
+| コード | 原因 |
 | --- | --- |
-| `send(name, data?, options?)` | `Promise<Response>`。target省略はBackground、timeoutMs既定10,000 |
-| `notify(name, data?, options?)` | responseがvoidの名前だけ。ハンドラー完了ACKを待つ |
-| `notifyAll(name, data, options)` | 明示target必須。dataなしはundefinedを渡す。各instanceのdelivered/errorを含む `{ results }` を返す |
-| `on(name, handler)` | `(data, sender) => Response \| Promise<Response>`。解除関数を返す |
-| `installPageBridge(options)` | ISOLATED専用。双方向ポリシーとvalidatorで公開操作を限定する `PageBridge` を返す |
-| `ready()` | 現在の登録の保存・ACKを待つ。解除後に呼べばsession削除とPort解放まで待てる |
-| `dispose()` | clientのハンドラー、実行中の受信待機、送信・readyの待機を解除。再利用不可 |
-| `startBackground()` | 同期的にルーターlistenerを登録。二重起動を拒否し、解除関数を返す |
+| `NO_RECEIVER` | 宛先に一致する受信ハンドラーがない |
+| `AMBIGUOUS_TARGET` | `send` / `notify` の宛先に複数一致した |
+| `ROUTER_UNAVAILABLE` | Background で `startBackground()` していない |
+| `TIMEOUT` | `timeoutMs` 内に応答がなかった |
+| `TRANSPORT_CLOSED` | 接続が切れた、または解除・破棄された |
+| `HANDLER_ERROR` | 受信ハンドラーが例外を投げた |
+| `SERIALIZATION_ERROR` | JSON 互換ではないデータ |
+| `CONTEXT_UNAVAILABLE` | 実行場所を特定できない（例: 判定前の popout） |
 
-1つのrealmにある全factoryで、同名ハンドラーの二重登録を拒否します。clientのdisposeは別clientの登録を削除しません。解除やtimeoutは既に実行した副作用を取り消しません。最後の解除後の登録削除失敗は `ready()` で観測でき、残ったsession候補は次回の検証時に削除されます。
-
-`ignoreMissing: true` は `{ delivered: true, value: Response } | { delivered: false }` を返します。正常なvoid応答でも `delivered: true` です。false・省略時はResponse、boolean変数の場合はResponseとDeliveryのunionになります。抑制するのは `NO_RECEIVER` だけです。
-
-## 宛先と送信元
-
-- Background: `{ context: 'background' }`
-- Content Script: `{ context: 'content-script', tabId, world?, frameId?, documentId?, instanceId? }`。world既定ISOLATED、単一送信のframeId既定0。notifyAllでframeId省略時は全登録frameに一致します。
-- view: `{ context: 'popup' | 'side-panel' | 'popout' | 'options' | 'extension-page' | 'devtools', windowId?, tabId?, documentId?, instanceId? }`
-
-すべての条件はANDです。tabIdは物理的所属であり、popoutの関連タブではありません。0件は `NO_RECEIVER`、単一送信で2件以上は配送前に `AMBIGUOUS_TARGET`。選定後の切断・購読消失は `TRANSPORT_CLOSED` です。notifyAllは各宛先の失敗をreportへ残し、0件は `NO_RECEIVER` になります。
-
-handlerのsenderにはネイティブから得た拡張機能id、確認できたtabId/frameId/windowId/documentId/url、および大分類context、`trust: 'extension' | 'page'` を渡します。viewの細かい役割ラベルは権限証明には使いません。payloadの自己申告でネイティブ送信元を上書きしません。window等の絞り込みに使う値もnative sender / documentIdで照合したgetContextsから取得します。tabに属する受信先は登録・再接続時とwindowIdによる配送先照合の直前にtabs.getで最新の所属を確認し、sessionにも反映します。別windowへ移動したタブには旧window宛てで配送しません。tabId/documentId/instanceId等とのAND条件は維持します。
-
-## データとエラー
-
-有限number、string、boolean、null、plain object、密なarrayを扱います。トップレベルのundefinedは値なしenvelopeで表します。内部undefined、Date/Map/Set/BigInt/関数、accessor、symbol、循環、疎配列を黙って変換しません。境界のJSONは深さ64、走査100,000値、UTF-8で1MiB以内です。envelopeの追加分も上限に含まれます。
-
-主なエラーは `NO_RECEIVER`、`AMBIGUOUS_TARGET`、`ROUTER_UNAVAILABLE`、`TIMEOUT`、`TRANSPORT_CLOSED`、`HANDLER_ERROR`、`SERIALIZATION_ERROR`、`VALIDATION_ERROR` です。handlerのsync throw / async rejectは常に `HANDLER_ERROR` へ変換します。nativeエラーを特定できない場合はcauseを保持した `NATIVE_ERROR` です。wireにはcode/messageだけを返し、stack/causeを送りません。
-
-## 再接続と寿命
-
-受信realmにつき1本のPortを共有し、要求IDで多重化します。Background宛て送信はruntime.sendMessage、同じBackground内は同じ検証を通したローカル配送です。Content Scriptへの業務配送もPort経由です。tabs.sendMessageは復旧時の文書・instance限定制御に使います。
-
-session記録にはinstance ID・世代・名前・native識別情報だけを保存します。payload、関数、未完了要求は保存しません。messaging単独では切断直後に再接続せず、次のsend/ready/配送用の再接続制御を契機にだけ再登録します。storage Backgroundを併用する場合は、文書失効確認の空通知もこの制御を使います。SW停止で中断された失効確認を新しいBackgroundへ持ち越しません。明示的な復旧は最大3試行（待機0/25/100ms）、要求期限内です。heartbeat・定期探索はありません。
-
-再起動したルーターは全保存候補に制御メッセージを送り、ACKと再登録を確認してから件数を決定します。不在が確認できた候補だけを削除し、確認時のtimeout・権限異常は配送失敗として伝えます。制御には業務payloadを含めません。実行中に失われた要求は自動再送せず、exactly-onceは保証しません。
-
-実装根拠: [Chrome Message passing](https://developer.chrome.com/docs/extensions/develop/concepts/messaging)、[MDN runtime.onMessage](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/runtime/onMessage)、[MDN runtime.Port](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/runtime/Port)。onMessageは対象メッセージだけ非同期処理へ進み、非async listenerの `return true` とsendResponseを使います。
+その他は [エラー](errors.md) を参照してください。

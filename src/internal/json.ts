@@ -1,5 +1,12 @@
 import { WebextError } from './errors'
 
+/**
+ * 送受信・保存できる JSON 互換の値です。
+ *
+ * 有限の数値・文字列・真偽値・`null`、およびそれらからなる配列とプレーンオブジェクトです。
+ * `undefined`（トップレベルを除く）・`Date`・`Map`・関数・循環参照などは扱えません
+ * （`SERIALIZATION_ERROR`）。
+ */
 export type JsonValue =
   | null
   | boolean

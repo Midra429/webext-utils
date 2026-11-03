@@ -1,7 +1,7 @@
 import type { MessageTarget } from '../../src/messaging'
 
 import { webextMessaging } from '../../src/messaging'
-import { PAGE_PROTOCOL, eventName } from '../../src/messaging/page-wire'
+import { PAGE_PROTOCOL, eventName } from '../../src/messaging/page/wire'
 import { testOrigin } from './report'
 
 type Messages = {

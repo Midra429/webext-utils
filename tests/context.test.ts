@@ -156,7 +156,6 @@ describe('synchronous native evidence', () => {
     ]
     expect(await webextContext.resolve()).toEqual({
       kind: 'background',
-      implementation: 'service-worker',
       source: 'native',
       instanceId: 'instance',
       documentId: 'document',
@@ -167,7 +166,6 @@ describe('synchronous native evidence', () => {
     api.extension.getBackgroundPage = () => window
     expect(webextContext.get()).toMatchObject({
       kind: 'background',
-      implementation: 'page',
     })
   })
   test('popup is selected by self Window rather than a manifest path', () => {
@@ -180,14 +178,15 @@ describe('synchronous native evidence', () => {
     api.extension.getViews = () => [{}]
     expect(webextContext.get().kind).toBe('unknown')
   })
-  test('Firefox sidebar is normalized without treating browser as Firefox', () => {
+  test('side panels are not classified synchronously in any browser', () => {
     const { api, window } = page('moz-extension://test-extension/shared.html')
     api.runtime.getURL = (path) => `moz-extension://test-extension/${path}`
     api.extension.getViews = ({ type }) => (type === 'sidebar' ? [window] : [])
     global('browser', { ...api, sidebarAction: { open() {} } })
-    expect(webextContext.get().kind).toBe('side-panel')
+    // Chrome has no synchronous evidence, so Firefox resolves the same way.
+    expect(webextContext.get().kind).toBe('unknown')
   })
-  test('Chrome is never passed the Firefox-only sidebar view enum', () => {
+  test('the Firefox-only sidebar view enum is never used', () => {
     const { api } = page()
     api.extension.getViews = ({ type }) => {
       expect(type).not.toBe('sidebar')
@@ -216,6 +215,26 @@ describe('resolve identity and cache', () => {
       windowId: 5,
     })
     expect(webextContext.get().kind).toBe('side-panel')
+  })
+  test('Chrome side panels without a window are resolved', async () => {
+    const { api } = page()
+    api.runtime.getContexts = async () => [
+      context('SIDE_PANEL', { windowId: -1, tabId: -1 }),
+    ]
+    expect(await webextContext.resolve()).toMatchObject({
+      kind: 'side-panel',
+      instanceId: 'instance',
+      windowId: 5,
+    })
+    // The same page open in several windows keeps the role without an identity.
+    api.runtime.getContexts = async () => [
+      context('SIDE_PANEL', { windowId: -1, tabId: -1 }),
+      context('SIDE_PANEL', { windowId: -1, tabId: -1, contextId: 'other' }),
+    ]
+    const info = await webextContext.resolve()
+    expect(info.kind).toBe('side-panel')
+    expect(info.instanceId).toBeUndefined()
+    expect(info.windowId).toBe(5)
   })
   test('same URL with multiple views is left unknown', async () => {
     const { api } = page()

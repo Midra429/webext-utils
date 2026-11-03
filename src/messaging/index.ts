@@ -1,5 +1,10 @@
-import type { Unsubscribe } from '../internal/errors'
-import type { RuntimePolicy } from './page-bridge'
+/**
+ * Background・Content Script・拡張機能のページの間で、型付きのメッセージを送受信するモジュールです。
+ *
+ * @module
+ */
+import type { Unsubscribe } from '../internal/types'
+import type { RuntimePolicy } from './page/bridge'
 import type {
   MessagingClient,
   MessagingOptions,
@@ -7,28 +12,62 @@ import type {
   SendOptions,
 } from './types'
 
-import { IsolatedBridge } from './page-bridge'
-import { PageClient } from './page-client'
+import { currentHub as current } from './hub'
+import { IsolatedBridge } from './page/bridge'
+import { PageClient } from './page/client'
 import { DEFAULT_TIMEOUT, deadline, fail } from './protocol'
-import { currentRealm as current } from './shared'
 
-export type { ErrorCode, Unsubscribe } from '../internal/errors'
+export type { ErrorCode, WebextErrorOptions } from '../internal/errors'
 export type { JsonValue } from '../internal/json'
+export type { Subscription, Unsubscribe } from '../internal/types'
 export type {
+  BackgroundTarget,
+  ContentScriptTarget,
   Delivery,
+  MessageData,
+  MessageHandler,
+  MessageMap,
+  MessageName,
+  MessageResponse,
   MessageSender,
   MessageTarget,
   MessagingClient,
   MessagingOptions,
+  NotificationName,
   NotificationReport,
   PageBridge,
   PageBridgeLimits,
   PageBridgeOptions,
+  PageMessageRule,
+  ResolvedMessages,
   SendOptions,
+  ViewTarget,
+  ViewTargetContext,
 } from './types'
 
 export { WebextError, isWebextError } from '../internal/errors'
 
+/**
+ * 型付きのメッセージ送受信クライアントを作成します。
+ *
+ * 作成するだけではブラウザ API に触れません。Background では
+ * {@link startBackground} の登録が必要です。
+ *
+ * @typeParam Override メッセージの型定義。グローバルの `WebextMessages` と統合されます
+ * @param options MAIN world で使う場合のブリッジ設定
+ *
+ * @example
+ * ```ts
+ * import { webextMessaging } from '@midra/webext-utils/messaging'
+ *
+ * type Messages = {
+ *   'app:version': { data: void; response: string }
+ * }
+ *
+ * const messaging = webextMessaging<Messages>()
+ * const version = await messaging.send('app:version')
+ * ```
+ */
 function create<Override = {}>(
   options: MessagingOptions = {}
 ): MessagingClient<Override> {
@@ -99,8 +138,33 @@ function create<Override = {}>(
   }
   return client as unknown as MessagingClient<Override>
 }
-export const webextMessaging = Object.assign(create, {
-  startBackground(): Unsubscribe {
-    return current().startBackground()
-  },
-})
+/**
+ * Background でメッセージの中継（ルーター）を開始します。
+ *
+ * Background のスクリプトの最上位で、最初の `await` より前に呼び出してください
+ * （Service Worker / イベントページの再起動ごとに必要です）。
+ *
+ * @returns ルーターを停止する関数
+ * @throws {WebextError} Background 以外では `CONTEXT_UNAVAILABLE`、二重登録は `INVALID_ARGUMENT`
+ *
+ * @example
+ * ```ts
+ * // background.ts
+ * webextMessaging.startBackground()
+ * const messaging = webextMessaging<Messages>()
+ * messaging.on('app:version', () => '1.0.0')
+ * ```
+ */
+function startBackground(): Unsubscribe {
+  return current().startBackground()
+}
+
+/**
+ * 型付きのメッセージ送受信クライアントを作成する関数です。
+ *
+ * `webextMessaging<Messages>(options?)` でクライアントを作成し、
+ * `webextMessaging.startBackground()` で Background のルーターを開始します。
+ */
+export const webextMessaging: typeof create & {
+  startBackground: typeof startBackground
+} = Object.assign(create, { startBackground })

@@ -4,8 +4,7 @@ import { webextMessaging } from '@midra/webext-utils/messaging'
 import { webextPopout } from '@midra/webext-utils/popout'
 
 const handle: PopoutHandle = await webextPopout.open({
-  source: 'sidePanel',
-  sourceTarget: { tabId: 42 },
+  source: 'side-panel',
   associatedTabId: 7,
   width: 480,
   height: 720,
@@ -39,6 +38,17 @@ void webextPopout.open({
   // @ts-expect-error source target is exclusive
   sourceTarget: { tabId: 1, windowId: 2 },
 })
+void webextPopout.open({
+  source: 'popup',
+  sourceTarget: { tabId: 42 },
+  closeOriginal: true,
+})
+// @ts-expect-error a side panel cannot be closed after opening a popout
+void webextPopout.open({ source: 'side-panel', closeOriginal: true })
+// @ts-expect-error side panel pages are global
+void webextPopout.open({ source: 'side-panel', sourceTarget: { tabId: 1 } })
+// @ts-expect-error the old camelCase name is not accepted
+void webextPopout.open({ source: 'sidePanel' })
 // @ts-expect-error moving an existing tab is not exposed
 void webextPopout.open({ source: 'popup', tabId: 1 })
 // @ts-expect-error IDs are numeric

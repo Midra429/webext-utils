@@ -1,5 +1,5 @@
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { arch, platform, release } from 'node:os'
+import { arch, platform, release, tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 import { launchFirefox } from './lib/firefox'
@@ -9,8 +9,8 @@ const root = resolve(import.meta.dir, '..')
 const chrome = process.argv.includes('--chrome')
 const integration = process.argv.includes('--integration')
 const review = process.argv.includes('--review')
-const temp = await mkdtemp('/private/tmp/webext-utils-browser-')
-const profile = await mkdtemp('/private/tmp/webext-utils-profile-')
+const temp = await mkdtemp(join(tmpdir(), 'webext-utils-browser-'))
+const profile = await mkdtemp(join(tmpdir(), 'webext-utils-profile-'))
 const expected = new Set(
   review
     ? ['review:window-move', 'review:large-migration']
@@ -192,6 +192,8 @@ try {
         '--no-first-run',
         '--no-default-browser-check',
         `--load-extension=${temp}`,
+        // Extra flags, e.g. CHROME_FLAGS='--no-sandbox' when running as root.
+        ...(process.env.CHROME_FLAGS?.split(' ').filter(Boolean) ?? []),
         'about:blank',
       ],
       { stdout: 'inherit', stderr: 'inherit' }

@@ -6,8 +6,8 @@ import type {
   StorageArea,
 } from './types'
 
+import { object } from '../internal/browser'
 import { WebextError } from '../internal/errors'
-import { object } from '../internal/native'
 import { Environment } from '../messaging/environment'
 import {
   JOURNAL,
@@ -16,9 +16,11 @@ import {
   clone,
   equal,
   fail,
+  join,
   key,
+  segments,
   within,
-} from './common'
+} from './utils'
 
 type Versions = Record<string, number>
 type Entry = { key: string; before?: JsonValue; after?: JsonValue }
@@ -122,7 +124,7 @@ export class StorageEngine {
           (p !== '' &&
             (() => {
               try {
-                key(p)
+                segments(p)
                 return false
               } catch {
                 return true
@@ -155,7 +157,7 @@ export class StorageEngine {
     )
       throw fail('MIGRATION_CONFLICT', 'Invalid storage migration journal')
     const journal = j as unknown as Journal
-    if (journal.prefix) key(journal.prefix)
+    if (journal.prefix) segments(journal.prefix)
     const seen = new Set<string>()
     for (const e of journal.entries) {
       if (!object(e)) throw fail('MIGRATION_CONFLICT', 'Invalid journal entry')
@@ -263,8 +265,7 @@ export class StorageEngine {
         draft[k] = clone(v) as JsonValue
       }
       const full = (relative: string) => {
-        key(relative)
-        return prefix ? `${prefix}.${relative}` : relative
+        return join(prefix, relative)
       }
       let live = true
       const active = () => {

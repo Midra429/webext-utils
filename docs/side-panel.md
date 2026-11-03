@@ -1,148 +1,215 @@
-# sidePanel API
+# side-panel
 
-`@midra/webext-utils/sidePanel` の `webextSidePanel` は、Chromeの `sidePanel` とFirefoxの `sidebarAction` を操作します。factoryやBackgroundの登録は不要です。rootからも同じ公開名・型をimportできます。import時にはnative APIを読まず、listener・Port・保存データを作りません。
+`webextSidePanel` は、Chrome の `sidePanel` と Firefox の `sidebarAction` を**同じ関数・同じ引数・同じ結果**で扱います。
+ブラウザによって使える機能が異なる部分は、どちらでも同じ動作になる形に揃えています（[ブラウザ差の扱い](browser-differences.md#サイドパネル)）。
 
 ```ts
-import { webextSidePanel } from '@midra/webext-utils/sidePanel'
-
-await webextSidePanel.setPage('panel.html')
-await webextSidePanel.setPage('panel.html?detail', { tabId: 42 })
-const page = await webextSidePanel.getPage({ tabId: 42 })
-
-// 実際の拡張機能UIのクリックから、事前awaitなしで呼ぶ。
-document.querySelector<HTMLButtonElement>('#open-panel')?.addEventListener('click', () => {
-  void webextSidePanel.open().catch(console.error)
-})
+import { webextSidePanel } from '@midra/webext-utils/side-panel'
 ```
 
-## 操作と型
+## 準備
 
-| API | 戻り値・対象 |
+Manifest にサイドパネルのページを指定します。
+
+| ブラウザ | Manifest |
 | --- | --- |
-| `open(target?)` | `Promise<void>`。省略=active window、明示は `{ windowId }` または `{ tabId }` |
-| `close(target?)` | `Promise<void>`。省略=active window。Chromeのwindow指定はglobal panel、tab指定はそのtab固有panelだけを閉じる |
-| `setPage(path, scope?)` | `Promise<void>`。省略=global設定。`{ tabId }`、Firefoxのみ `{ windowId }` |
-| `getPage(scope?)` | `Promise<string \| undefined>`。有効な設定を自拡張機能の絶対URLに正規化。未設定だけ `undefined` |
-| `getState({ windowId })` | `Promise<SidePanelState>`。Firefoxはnative確定値、Chromeは `unknown` |
-| `onOpened(handler)` / `onClosed(handler)` | `Unsubscribe`。Chromeのnativeイベントだけを購読。Firefoxは同期的に非対応エラー |
-| `getCapabilities()` | `SidePanelCapabilities`。そのcontextでのメソッド・イベントの機能検出 |
+| Chrome | `"permissions": ["sidePanel"]` と `"side_panel": { "default_path": "panel.html" }` |
+| Firefox | `"sidebar_action": { "default_panel": "panel.html", "default_title": "...", "open_at_install": false }` |
 
-`SidePanelTarget` / `SidePanelScope` はtabIdとwindowIdの排他的unionです。両方指定、明示的な空object、負数・小数・無限大のIDは拒否します。特殊IDの `WINDOW_ID_CURRENT` 等も渡しません。省略は `undefined` を使います。
+Firefox の `open_at_install` は既定で `true`（インストール時に自動で開く）です。Chrome と同じ動作にするため `false` を指定してください。
 
-設定のglobal scopeは、全windowを同時に開くという意味ではありません。Chromeの `open({ tabId })` はnativeと同様にtab固有設定がなければglobal panelを開けます。`close({ tabId })` の契約はそれより厳しく、他のpanelを代わりに閉じません。
+次の2つも登録してください。開閉状態の判定（`isOpen` / `toggle`）と開閉の通知（`onOpened` / `onClosed`）を、両ブラウザで同じ仕組みで動かすために必要です。
 
 ```ts
-const state = await webextSidePanel.getState({ windowId: 1 })
-if (state.state === 'unknown') {
-  console.log(state.reason) // 'NATIVE_STATE_UNAVAILABLE'
-} else {
-  console.log(state.state, state.source) // 'open' | 'closed', 'native'
-}
+// background.ts（最上位で、最初の await より前に）
+import { webextSidePanel } from '@midra/webext-utils/side-panel'
 
-const capabilities = webextSidePanel.getCapabilities()
-if (capabilities.events.opened) {
-  const stop = webextSidePanel.onOpened((event) => {
-    console.log(event.windowId, event.tabId, event.page, event.source)
-  })
-  // view終了時などに解除。複数回呼んでも安全。
-  stop()
-}
+webextSidePanel.startBackground()
 ```
-
-公開型は `SidePanelTarget`、`SidePanelScope`、`SidePanelState`、`SidePanelEvent`、`SidePanelCapabilities`、共通の `WebextError` / `ErrorCode` / `Unsubscribe` です。Chrome/Firefoxのambient型やDOM型を利用者に要求しません。
-
-capabilitiesのshape:
 
 ```ts
-{
-  open: { activeWindow: boolean, window: boolean, tab: boolean },
-  close: { activeWindow: boolean, window: boolean, tab: boolean },
-  setPage: { global: boolean, window: boolean, tab: boolean },
-  getPage: { global: boolean, window: boolean, tab: boolean },
-  nativeState: boolean,
-  events: { opened: boolean, closed: boolean },
-}
+// panel.ts（サイドパネルとして表示するページ）
+import { webextSidePanel } from '@midra/webext-utils/side-panel'
+
+webextSidePanel.registerPanel()
 ```
 
-値はその場で機能検出した結果で、権限・window/tabの存在・gestureの保証ではありません。操作時にもnative APIを取得し直し、receiverを保持します。`browser` が存在するだけではFirefoxと判定しません。利用者が部分的なpolyfillを置いた場合も、メソッドごとに `browser` / `chrome` を探します。
+## API
 
-## ブラウザ差とgesture
-
-| 操作 | Chrome 142+ | Firefox 145+ |
+| API | 戻り値 | 説明 |
 | --- | --- | --- |
-| active-window open/close | `windows.getLastFocused()` で具体的なIDを取得してnative呼び出し | 引数なしのnative APIを同期に開始 |
-| 明示window/tabへのopen | 対応 | `UNSUPPORTED_OPERATION`、native呼び出し前に拒否 |
-| 明示windowへのclose | 対応。window内のglobal panelが対象 | 非対応 |
-| 明示tabへのclose | 145+のみ。142–144・版不明は事前拒否 | 非対応 |
-| global/tabページ設定・取得 | 対応 | 対応。tab固有設定はwindow内sidebarの内容の切替 |
-| windowページ設定・取得 | 事前拒否 | 対応 |
-| 開閉状態 | `unknown` | `sidebarAction.isOpen` による確定値 |
-| opened/closedイベント | native `onOpened` / `onClosed` | 非対応。unload等で代替しない |
+| `open(options?)` | `Promise<void>` | 開く。既に開いていれば何もしない |
+| `close(options?)` | `Promise<void>` | 閉じる。既に閉じていれば何もしない |
+| `toggle(options?)` | `Promise<void>` | 開いていれば閉じ、閉じていれば開く |
+| `isOpen(options?)` | `Promise<boolean>` | 開いているか |
+| `setPage(path)` | `Promise<void>` | 表示するページを変更する（全ウィンドウ共通） |
+| `getPage()` | `Promise<string>` | 表示するページの絶対 URL |
+| `resetPage()` | `Promise<void>` | 表示するページを Manifest の既定値に戻す |
+| `registerPanel()` | `Subscription` | パネル側のページで呼ぶ（開閉状態の判定・通知に必要） |
+| `onOpened(listener)` | `Unsubscribe` | 開いたときの通知を受け取る |
+| `onClosed(listener)` | `Unsubscribe` | 閉じたときの通知を受け取る |
+| `startBackground(options?)` | `Unsubscribe` | Background で呼ぶ（開閉の通知・アイコンのクリックでの開閉） |
 
-Chrome142–144のnative `close({ tabId })` はglobal panelも閉じ得ます。145からglobalへのfallbackをせずrejectするため、この既知の意味の差だけ `navigator.userAgent` のChrome/Chromium/HeadlessChrome majorを読みます。145未満・版不明は `UNSUPPORTED_OPERATION`。メソッドが存在するだけで安全と判断しません。142/145/156でnativeの差とwrapperの振る舞いを実機検証しています。
+`options` は `{ windowId?: number }` です。省略すると、最後にフォーカスされたウィンドウ（ユーザーが操作しているウィンドウ）が対象です。
 
-明示targetのChrome操作と、引数なしFirefox操作には事前のawaitを入れません。Chromeの引数省略経路だけはactive windowを取得するawaitが入ります。今回のChrome142/145/156ではこのawait後も開閉できました。Firefox145/156/158では、クリック後に `await windows.getLastFocused()` を挟むとopen/closeは `USER_GESTURE_REQUIRED` になり、元の開閉状態を保持しました。任意のawait・タイマー・メッセージrelay後までgestureを保証しません。Chromeも可能なら既知のwindowId/tabIdをクリック時に直接指定してください。
+## 開く・閉じる
 
-Chromeの設定・enabled・生存中のpanel文書・イベント履歴は可視状態を証明しないため、`getState` は履歴を保存せず常に `unknown` を返します。windowの実在もこの結果だけからは証明しません。Firefoxではnativeのbooleanを `open` / `closed` に変換し、nativeの失敗を `closed` に置き換えません。`toggle` は提供しません。
-
-## ページとエラー
-
-- 相対pathは拡張機能rootを基準に解決し、query/hashも保持します。Chromeの `setOptions` にはroot相対path、Firefoxの `setPanel` には絶対URLを渡します。
-- 外部URL・他の拡張機能・opaque URL・空文字は `INVALID_ARGUMENT`。nativeが外部panel設定を返した場合は `UNSUPPORTED_OPERATION` です。
-- `setPage` は `enabled` を変更しません。既存のdisabled設定の有効化は利用側のnative設定で行います。`getPage` は設定を返し、表示中であるとは主張しません。
-- nativeの未提供メソッド/イベントは `UNSUPPORTED_OPERATION`。SSRやMAIN等、拡張機能runtimeが使えない場所の操作は `CONTEXT_UNAVAILABLE`。
-- gesture/permission/tab/windowの明確なnative文言は、それぞれ `USER_GESTURE_REQUIRED` / `PERMISSION_DENIED` / `TAB_NOT_FOUND` / `WINDOW_NOT_FOUND` に変換します。それ以外は `NATIVE_ERROR`。`operation` は `sidePanel.open` 等、nativeの `cause` を保持します。
-- nativeイベントは `{ windowId, tabId?, page, source: 'native' }` に正規化します。不正ID・自拡張機能外のpathは配信しません。未購読時のlistenerはありません。
-
-MAIN向けの開閉RPCは追加していません。gestureや権限を維持できる保証がなく、直接使える拡張機能UIが入口です。popoutはこのモジュールの `getPage(scope)` を再利用します。[統合例](integration.md) を参照してください。
-
-## Manifestと入口
-
-Chrome:
-
-```json
-{
-  "manifest_version": 3,
-  "name": "Example",
-  "version": "1.0.0",
-  "minimum_chrome_version": "142",
-  "permissions": ["sidePanel"],
-  "side_panel": { "default_path": "panel.html" },
-  "action": {},
-  "background": { "service_worker": "background.js", "type": "module" }
-}
-```
-
-Firefox:
-
-```json
-{
-  "manifest_version": 3,
-  "name": "Example",
-  "version": "1.0.0",
-  "browser_specific_settings": {
-    "gecko": { "id": "example@example.com", "strict_min_version": "145.0" }
-  },
-  "sidebar_action": {
-    "default_panel": "panel.html",
-    "default_title": "Example",
-    "open_at_install": false
-  },
-  "action": {},
-  "background": { "scripts": ["background.js"], "type": "module" }
-}
-```
-
-`open_at_install: false` はFirefoxのインストール直後の自動表示を抑えたい場合の選択です。Firefoxに `sidePanel` 権限は指定しません。Manifest、HTMLの実体、表示の入口は利用側で用意します。サイドパネルの定義だけではChromeの開く入口になりません。上記の `action: {}` ではBackgroundで次のlistenerを同期登録できます。
+ブラウザは、**ユーザー操作（クリック・キーボードショートカット・コンテキストメニューなど）の処理内**でしか開閉を許可しません。
+イベントハンドラーの中で、**`await` を挟まずに**呼び出してください。
 
 ```ts
-import { webextSidePanel } from '@midra/webext-utils/sidePanel'
-
-chrome.action.onClicked.addListener(() => {
-  void webextSidePanel.open().catch(console.error)
+document.querySelector('#toggle')?.addEventListener('click', () => {
+  webextSidePanel.toggle().catch(console.error)
 })
 ```
 
-これは利用側のnative型を使う例です。`action.default_popup` がある構成では `onClicked` が発火しないため、popup内のボタンから `webextSidePanel.open()` を直接呼びます。このライブラリはManifestを書き換えたり、actionの動作を自動変更したりしません。
+```ts
+// NG: await の後では、ブラウザがユーザー操作の外と判断することがある
+button.addEventListener('click', async () => {
+  await somethingAsync()
+  await webextSidePanel.open() // USER_GESTURE_REQUIRED になり得る
+})
+```
 
-根拠: [Chrome sidePanel](https://developer.chrome.com/docs/extensions/reference/api/sidePanel)、[Firefox sidebarAction](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/sidebarAction)、[open](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/sidebarAction/open)、[close](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/sidebarAction/close)、[setPanel](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/sidebarAction/setPanel)、[sidebar_action](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/manifest.json/sidebar_action)。実行結果・未検証条件は [検証結果](testing.md) を参照してください。
+ユーザー操作の外で呼ぶと `USER_GESTURE_REQUIRED` で失敗します。
+
+`open()` / `close()` / `toggle()` は、ブラウザに状態が反映されるのを待ってから完了します（最大 1 秒）。完了後の `isOpen()` は新しい状態を返します。
+
+### Background から開閉する
+
+Background では、イベントから得たウィンドウ ID を渡して呼び出します。
+
+```ts
+// background.ts
+webextSidePanel.startBackground()
+
+chrome.contextMenus.onClicked.addListener((_info, tab) => {
+  if (tab) webextSidePanel.toggle({ windowId: tab.windowId }).catch(console.error)
+})
+```
+
+`windowId` には、ユーザーが操作したウィンドウの ID を指定してください。Firefox はユーザーが操作中のウィンドウでしか開閉できないため、ライブラリは両ブラウザでこの前提のもとに同じ動作をします。
+
+`toggle({ windowId })` を Background から呼ぶ場合は、`startBackground()` を登録しておくと、開閉の状態を同期的に判断してユーザー操作内で開閉できます。
+
+### アイコンのクリックで開閉する
+
+`openOnActionClick: true` を指定すると、ツールバーの拡張機能アイコンをクリックしたときにパネルを開閉します。
+
+```ts
+// background.ts
+webextSidePanel.startBackground({
+  openOnActionClick: true,
+  onError: (error) => console.error(error), // 省略可
+})
+```
+
+- Manifest の `action.default_popup` を設定している場合、クリックはポップアップを開くため動作しません（両ブラウザ共通）。
+- 他の `action.onClicked` リスナーも引き続き呼ばれます。
+- Background の起動ごとに登録が必要です（設定はブラウザに保存されません）。
+
+## 開いているか確認する
+
+```ts
+const open = await webextSidePanel.isOpen() // 操作中のウィンドウ
+const other = await webextSidePanel.isOpen({ windowId: 3 })
+```
+
+ユーザー操作は不要です。この拡張機能のパネルがそのウィンドウで開いているかを返します。
+パネル側のページで `registerPanel()` を呼んでいない場合、開いていても `false` になることがあります（Chrome はブラウザ API からパネルのウィンドウを取得できないため）。
+
+## ページを変更する
+
+表示するページは、全体・ウィンドウごと・タブごとに設定できます。
+
+```ts
+// 全ウィンドウ共通
+await webextSidePanel.setPage('panel.html?view=settings')
+
+// ウィンドウ 3 だけ
+await webextSidePanel.setPage('panel.html?view=window', { windowId: 3 })
+
+// タブ 42 がアクティブなときだけ
+await webextSidePanel.setPage('panel.html?view=tab', { tabId: 42 })
+
+await webextSidePanel.getPage({ tabId: 42 }) // 'chrome-extension://<id>/panel.html?view=tab'
+await webextSidePanel.resetPage({ tabId: 42 }) // タブの設定を削除
+await webextSidePanel.resetPage() // 全体の設定を Manifest の既定値に戻す
+```
+
+| `target` | 意味 | `getPage(target)` の結果 |
+| --- | --- | --- |
+| 省略 | 全ウィンドウ共通 | 全体の設定 |
+| `{ windowId }` | そのウィンドウのパネル | ウィンドウ > 全体 |
+| `{ tabId }` | そのタブがアクティブなときのパネル | タブ > タブのウィンドウ > 全体 |
+
+- 優先順位は「タブ > ウィンドウ > 全体」です。
+- 開閉状態はどの設定でもウィンドウ単位です。タブを切り替えると、パネルは開いたまま、内容がそのタブのページに切り替わります。
+- 相対パスは拡張機能のルートを基準に解決します。クエリとハッシュは保持します。
+- この拡張機能以外の URL（Web ページ・他の拡張機能）は `INVALID_ARGUMENT` です。
+- 開いているパネルにも反映されます。
+- `getPage()` は設定値を返します。パネルが開いているかどうかは `isOpen()` で確認してください。
+
+### ウィンドウ・タブごとのページの仕組みと条件
+
+ブラウザには全体のページだけを設定し、ウィンドウ・タブごとのページへの切り替えは、パネルのページ（`registerPanel()`）がライブラリの記録を見て行います。
+Chrome にはウィンドウごとの設定がなく、タブごとの設定では開閉状態までタブ単位になり Firefox と動作が異なるためです。
+
+- **パネルに表示するすべてのページで `registerPanel()` を呼んでください。** 切り替え先のページで呼ばれていないと、以降の切り替えが止まります。
+- Manifest に `storage` 権限が必要です（設定は `storage.session` に保存します）。
+- 切り替えはページの遷移です。パネル内の状態（入力中の値など）は引き継がれません。必要なら storage や messaging で共有してください。
+- パネルを開いた直後は、全体のページが読み込まれてから該当するページへ遷移します。
+- 切り替えでは `onOpened` / `onClosed` は通知されません。`onClosed` の `page` は閉じた時点のページです。
+- 閉じたタブ・ウィンドウの設定は、Background の `startBackground()` が削除します（登録がない場合も、ブラウザを閉じると消えます）。
+
+## 開閉の通知を受け取る
+
+Background の `startBackground()` とパネル側の `registerPanel()` を登録すると、開閉が `onOpened` / `onClosed` に通知されます。
+
+```ts
+// background.ts やポップアップなど
+const stopOpened = webextSidePanel.onOpened(({ windowId, page }) => {
+  console.log('opened', windowId, page)
+})
+const stopClosed = webextSidePanel.onClosed(({ windowId }) => {
+  console.log('closed', windowId)
+})
+
+// 不要になったら解除する
+stopOpened()
+stopClosed()
+```
+
+| 通知 | タイミング |
+| --- | --- |
+| `onOpened` | パネルが開いたとき |
+| `onClosed` | パネルが閉じたとき（閉じた・他のパネルに切り替えた・ウィンドウを閉じた） |
+
+- 通知を受け取れるのは Background と拡張機能のページ（ポップアップ・タブ・サイドパネル）です。Content Script には届きません。
+- 通知はリスナーの登録後に起きた開閉だけです。現在の状態は `isOpen()` で確認してください。
+- `page` はパネルに表示されているページの絶対 URL です（クエリとハッシュを含みます）。
+- 通知は Background が配信します。Background の登録がないと通知されません。
+
+`registerPanel()` は1ページにつき1回です。戻り値を呼ぶと登録を解除します。`ready` はウィンドウを特定して登録が完了すると解決します。
+
+## エラー
+
+| コード | 原因 |
+| --- | --- |
+| `USER_GESTURE_REQUIRED` | ユーザー操作の外で開閉した |
+| `UNSUPPORTED_OPERATION` | サイドパネルの API がない（Manifest の設定・権限を確認） |
+| `CONTEXT_UNAVAILABLE` | 拡張機能の外で呼んだ、`startBackground()` を Background 以外で呼んだ、Manifest に既定ページがない |
+| `INVALID_ARGUMENT` | 不正な `windowId`・ページ、二重登録 |
+| `WINDOW_NOT_FOUND` | 指定したウィンドウが存在しない |
+| `PERMISSION_DENIED` | 権限が不足している |
+| `NATIVE_ERROR` | その他のブラウザ API の失敗（`cause` に元のエラー） |
+
+## 提供しない機能
+
+次の機能は、ブラウザの制約で両ブラウザの動作を揃えられないため提供していません。
+
+- **タブごとの開閉状態**（Chrome の「タブ専用パネル」）: Firefox で再現するには、タブを切り替えた瞬間に開閉する必要があります。Firefox の開閉はユーザー操作の処理内でしか呼べず、タブの切り替えはユーザー操作として扱われないため実現できません。
+- **アクティブでないウィンドウを指定した開閉**: Firefox の開閉はアクティブなウィンドウだけが対象です。先にウィンドウへフォーカスを移すと、その待ち時間でユーザー操作の扱いが失われます。
+- **ユーザー操作を伴わない開閉**: どちらのブラウザも許可していません。
+
+参考: [Chrome sidePanel](https://developer.chrome.com/docs/extensions/reference/api/sidePanel) / [Firefox sidebarAction](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/sidebarAction)

@@ -1,17 +1,17 @@
-import type { Unsubscribe } from '../internal/errors'
+import type { Unsubscribe } from '../../internal/types'
 import type {
   MessageSender,
   MessagingClient,
   PageBridgeLimits,
   SendOptions,
-} from './types'
+} from '../types'
 
-import { assertJson } from '../internal/json'
-import { object } from '../internal/native'
-import { PagePeer } from './page-peer'
-import { serviceClients } from './page-services'
-import { PageEnvironment, channel, encode, limits } from './page-wire'
-import { DEFAULT_TIMEOUT, deadline, fail, name, target } from './protocol'
+import { object } from '../../internal/browser'
+import { assertJson } from '../../internal/json'
+import { DEFAULT_TIMEOUT, deadline, fail, name, target } from '../protocol'
+import { PagePeer } from './peer'
+import { serviceClients } from './services'
+import { PageEnvironment, channel, encode, limits } from './wire'
 
 type Handler = (data: unknown, sender: MessageSender) => unknown
 const clients = new WeakMap<object, Map<string, PageClient>>()

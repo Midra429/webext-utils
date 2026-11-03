@@ -1,7 +1,7 @@
-import type { Unsubscribe } from '../internal/errors'
-import type { PageBridge } from './types'
+import type { Unsubscribe } from '../../internal/types'
+import type { PageBridge } from '../types'
 
-import { fail } from './protocol'
+import { fail } from '../protocol'
 
 export interface PageService {
   request(data: unknown, emit: (value: unknown) => void): Promise<unknown>

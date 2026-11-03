@@ -1,10 +1,10 @@
 import type { ErrorCode } from '../internal/errors'
 import type { PopoutOptions } from './types'
 
+import { nativeMethod, object, validId } from '../internal/browser'
 import { WebextError, isWebextError } from '../internal/errors'
-import { isExtensionUrl, parseUrl } from '../internal/extension-url'
-import { nativeMethod, object, validId } from '../internal/native'
 import { POPOUT_PARAM } from '../internal/popout-record'
+import { isExtensionUrl, parseUrl } from '../internal/url'
 
 const TAB = /no tab with id|invalid tab id/i
 const WINDOW = /no window with id|invalid window id/i
@@ -72,7 +72,7 @@ export function options(value: unknown): PopoutOptions {
   const v = object(value)
   if (
     !v ||
-    !['popup', 'sidePanel'].includes(String(v.source)) ||
+    !['popup', 'side-panel'].includes(String(v.source)) ||
     Object.keys(v).some(
       (k) =>
         ![
@@ -112,6 +112,14 @@ export function options(value: unknown): PopoutOptions {
       v.reuseKey.length > 256)
   )
     fail('INVALID_ARGUMENT', 'Invalid reuseKey')
+  if (
+    v.source === 'side-panel' &&
+    (v.sourceTarget !== undefined || v.closeOriginal !== undefined)
+  )
+    fail(
+      'INVALID_ARGUMENT',
+      'sourceTarget and closeOriginal are only available for source: popup'
+    )
   const target = object(v.sourceTarget)
   if (v.sourceTarget !== undefined) {
     if (

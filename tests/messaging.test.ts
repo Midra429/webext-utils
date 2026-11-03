@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test } from 'bun:test'
 
 import { WebextError } from '../src/internal/errors'
 import { assertJson } from '../src/internal/json'
+import { MessageHub } from '../src/messaging/hub'
 import {
   PROTOCOL,
   RECORD_PREFIX,
@@ -11,7 +12,6 @@ import {
   target,
   wire,
 } from '../src/messaging/protocol'
-import { Realm } from '../src/messaging/realm'
 import { NativeBus } from './helpers/messaging-native'
 
 const cleanup: (() => void)[] = []
@@ -22,7 +22,7 @@ afterEach(async () => {
 const tick = () => new Promise((resolve) => setTimeout(resolve, 5))
 function setup() {
   const bus = new NativeBus()
-  const bg = new Realm(bus.realm('background').env)
+  const bg = new MessageHub(bus.realm('background').env)
   const stop = bg.startBackground()
   cleanup.push(stop)
   const make = (
@@ -30,7 +30,7 @@ function setup() {
     meta: Record<string, unknown> = {}
   ) => {
     const native = bus.realm(kind, meta)
-    const realm = new Realm(native.env)
+    const realm = new MessageHub(native.env)
     const owner = {}
     cleanup.push(() => realm.dispose(owner))
     return {
@@ -42,7 +42,7 @@ function setup() {
       send: (
         key: string,
         data?: unknown,
-        options: Parameters<Realm['send']>[2] = {}
+        options: Parameters<MessageHub['send']>[2] = {}
       ) => realm.send(key, data, options, 'send', new Set()),
     }
   }

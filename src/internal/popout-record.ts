@@ -1,6 +1,6 @@
-import { nativeMethod, object, validId } from './native'
+import { nativeMethod, object, validId } from './browser'
 
-// Shared wire format for the popout writer and context reader. Not a public API.
+// Storage format shared by the popout manager (writer) and context (reader).
 export const POPOUT_PARAM = '__webext_utils_popout'
 export const POPOUT_KEY_PREFIX = '__webext_utils:popout:'
 const TOKEN_PATTERN = /^[\w-]{16,128}$/
@@ -11,7 +11,7 @@ export interface PopoutRecord {
   token: string
   windowId: number
   tabId: number
-  source: 'popup' | 'sidePanel'
+  source: 'popup' | 'side-panel'
   page: string
   associatedTabId?: number
 }
@@ -58,7 +58,7 @@ export async function readPopoutRecord(
       value.windowId !== windowId ||
       !validId(value.tabId) ||
       !validId(value.windowId) ||
-      (value.source !== 'popup' && value.source !== 'sidePanel') ||
+      (value.source !== 'popup' && value.source !== 'side-panel') ||
       (value.associatedTabId !== undefined && !validId(value.associatedTabId))
     )
       return undefined

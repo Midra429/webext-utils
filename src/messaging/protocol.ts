@@ -1,9 +1,9 @@
 import type { ErrorCode } from '../internal/errors'
 import type { MessageSender, MessageTarget } from './types'
 
+import { object, validId } from '../internal/browser'
 import { WebextError, nativeError } from '../internal/errors'
 import { assertJson } from '../internal/json'
-import { object, validId } from '../internal/native'
 
 export const PROTOCOL = '@midra/webext-utils/messaging'
 export const PORT = `${PROTOCOL}/1`
@@ -103,7 +103,7 @@ export function target(value: unknown): MessageTarget {
     )
       throw fail('INVALID_ARGUMENT', `Invalid ${key}`)
   }
-  return v as MessageTarget
+  return v as unknown as MessageTarget
 }
 export function request(value: unknown): Request {
   const v = envelope(value)
