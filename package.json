@@ -1,6 +1,6 @@
 {
   "name": "@midra/webext-utils",
-  "version": "0.0.2",
+  "version": "0.1.0",
   "description": "Chrome と Firefox の Manifest V3 拡張機能を同じコードで同じように動かすための、型安全で依存関係のない TypeScript ユーティリティ集",
   "author": "Midra <me@midra.me> (https://github.com/Midra429)",
   "homepage": "https://github.com/Midra429/webext-utils#readme",
