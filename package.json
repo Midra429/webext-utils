@@ -66,9 +66,9 @@
       "types": "./dist/messaging/index.d.ts",
       "import": "./dist/messaging/index.js"
     },
-    "./sidePanel": {
-      "types": "./dist/sidePanel/index.d.ts",
-      "import": "./dist/sidePanel/index.js"
+    "./side-panel": {
+      "types": "./dist/side-panel/index.d.ts",
+      "import": "./dist/side-panel/index.js"
     },
     "./popout": {
       "types": "./dist/popout/index.d.ts",

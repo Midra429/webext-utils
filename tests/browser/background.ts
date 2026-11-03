@@ -1,5 +1,5 @@
 import { webextContext } from '../../src/context'
-import { nativeMethod } from '../../src/internal/native'
+import { nativeMethod } from '../../src/internal/browser'
 import {
   POPOUT_KEY_PREFIX,
   POPOUT_PARAM,
@@ -34,7 +34,7 @@ void (async () => {
     version: 1,
     status: 'pending',
     token,
-    source: 'sidePanel',
+    source: 'side-panel',
     page,
   }
   await nativeMethod('storage', 'session', 'set')?.({ [key]: record })

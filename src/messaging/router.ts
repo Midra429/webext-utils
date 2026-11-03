@@ -3,8 +3,8 @@ import type { Port } from './port'
 import type { Endpoint, Reply, Request } from './protocol'
 import type { MessageSender } from './types'
 
+import { object, validId } from '../internal/browser'
 import { nativeError } from '../internal/errors'
-import { object, validId } from '../internal/native'
 import { observe, port } from './port'
 import {
   PORT,

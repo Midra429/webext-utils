@@ -1,22 +1,22 @@
-import type { ErrorCode, Unsubscribe } from '../internal/errors'
+import type { ErrorCode } from '../internal/errors'
 import type { PopoutRecord } from '../internal/popout-record'
+import type { Unsubscribe } from '../internal/types'
 import type { PopoutBounds, PopoutOptions } from './types'
 
 import { webextContext } from '../context'
+import { nativeMethod, object, validId } from '../internal/browser'
 import { WebextError } from '../internal/errors'
-import { isExtensionUrl, parseUrl } from '../internal/extension-url'
-import { nativeMethod, object, validId } from '../internal/native'
 import {
   POPOUT_KEY_PREFIX,
   POPOUT_PARAM,
   popoutPage,
   popoutToken,
 } from '../internal/popout-record'
+import { isExtensionUrl, parseUrl } from '../internal/url'
 import { Environment } from '../messaging/environment'
-import { Realm } from '../messaging/realm'
-import { currentRealm } from '../messaging/shared'
-import { webextSidePanel } from '../sidePanel'
-import { call, convert, fail, id, options, page, root } from './common'
+import { MessageHub, currentHub } from '../messaging/hub'
+import { webextSidePanel } from '../side-panel'
+import { call, convert, fail, id, options, page, root } from './utils'
 
 const TOKEN = /^[\w-]{16,128}$/
 const RPC = '__webext_utils__popout_rpc_v1'
@@ -193,13 +193,15 @@ export class PopoutManager {
     this.reconciled = true
     return records
   }
+  /** Resolves the page of the source UI. The same steps run in every browser. */
   private async resolvePage(
     opts: PopoutOptions
   ): Promise<PopoutOptions & { page: string }> {
     if (opts.page !== undefined) return { ...opts, page: page(opts.page) }
+    if (opts.source === 'side-panel')
+      return { ...opts, page: page(await webextSidePanel.getPage()) }
     let target = opts.sourceTarget
-    const firefox = !!nativeMethod('sidebarAction', 'getPanel')
-    if (!firefox && target?.windowId !== undefined) {
+    if (target?.windowId !== undefined) {
       const tabs = await call(['tabs', 'query'], {
         active: true,
         windowId: target.windowId,
@@ -213,36 +215,14 @@ export class PopoutManager {
         )
       target = { tabId: tab.id }
     }
-    let value: unknown
-    if (opts.source === 'popup') {
-      value = nativeMethod('action', 'getPopup')
-        ? await call(['action', 'getPopup'], target ?? {})
-        : object(object(await call(['runtime', 'getManifest']))?.action)
-            ?.default_popup
-    } else if (
-      nativeMethod('sidePanel', 'getOptions') ||
-      nativeMethod('sidebarAction', 'getPanel')
-    ) {
-      // Respect disabled Chrome panels without changing their configuration.
-      if (nativeMethod('sidePanel', 'getOptions')) {
-        const settings = object(
-          await call(['sidePanel', 'getOptions'], target ?? {})
-        )
-        if (!settings) fail('NATIVE_ERROR', 'Invalid panel settings')
-        if (settings.enabled === false)
-          fail('CONTEXT_UNAVAILABLE', 'Source panel is disabled; specify page')
-      }
-      value = await webextSidePanel.getPage(target)
-    } else {
-      const manifest = object(await call(['runtime', 'getManifest']))
-      value =
-        object(manifest?.side_panel)?.default_path ??
-        object(manifest?.sidebar_action)?.default_panel
-    }
+    const value = nativeMethod('action', 'getPopup')
+      ? await call(['action', 'getPopup'], target ?? {})
+      : object(object(await call(['runtime', 'getManifest']))?.action)
+          ?.default_popup
     if (value === undefined || value === '')
       fail(
         'CONTEXT_UNAVAILABLE',
-        'Source UI has no page; specify page explicitly'
+        'The popup has no page; specify page explicitly'
       )
     return {
       ...opts,
@@ -399,7 +379,7 @@ export class PopoutManager {
     const stops: Unsubscribe[] = []
     try {
       stops.push(
-        currentRealm().on(
+        currentHub().on(
           {},
           RPC,
           async (value, sender) => {
@@ -573,7 +553,7 @@ export async function request(
     resolve: async () => ({ kind: 'extension-page', source: 'native' }),
   }
   const response = object(
-    await new Realm(env).send(
+    await new MessageHub(env).send(
       RPC,
       { operation, value },
       { target: { context: 'background' } },

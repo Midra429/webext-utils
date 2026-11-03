@@ -1,23 +1,32 @@
-import type { Unsubscribe } from '../internal/errors'
+/**
+ * 現在のコードがどこ（Background・Content Script・ポップアップなど）で実行されているかを判定するモジュールです。
+ *
+ * @module
+ */
+import type { Unsubscribe } from '../internal/types'
 import type { ContextInfo, ContextMetadata, ContextRegistration } from './types'
 
-import { WebextError, nativeError } from '../internal/errors'
-import { isExtensionUrl, parseUrl } from '../internal/extension-url'
 import {
   nativeMethod,
   nativeValue,
   object,
   property,
   validId,
-} from '../internal/native'
+} from '../internal/browser'
+import { WebextError, nativeError } from '../internal/errors'
 import { POPOUT_PARAM, readPopoutRecord } from '../internal/popout-record'
+import { isExtensionUrl, parseUrl } from '../internal/url'
 
-export type { ErrorCode, Unsubscribe } from '../internal/errors'
+export type { ErrorCode, WebextErrorOptions } from '../internal/errors'
+export type { Subscription, Unsubscribe } from '../internal/types'
 export type {
+  ContentScriptWorld,
   ContextInfo,
+  ContextKind,
   ContextMetadata,
   ContextRegistration,
   ContextSource,
+  ViewKind,
 } from './types'
 
 export { WebextError, isWebextError } from '../internal/errors'
@@ -59,12 +68,7 @@ function environment(): Environment {
 }
 
 function snapshot(env: Environment): ContextInfo {
-  if (env.worker)
-    return {
-      kind: 'background',
-      implementation: 'service-worker',
-      source: 'native',
-    }
+  if (env.worker) return { kind: 'background', source: 'native' }
   if (env.isolated)
     return { kind: 'content-script', world: 'ISOLATED', source: 'native' }
   if (!env.own || !env.document || !env.window)
@@ -73,7 +77,7 @@ function snapshot(env: Environment): ContextInfo {
   if (url?.searchParams.has(POPOUT_PARAM))
     return { kind: 'unknown', source: 'unknown' }
   if (nativeMethod('extension', 'getBackgroundPage')?.() === env.window) {
-    return { kind: 'background', implementation: 'page', source: 'native' }
+    return { kind: 'background', source: 'native' }
   }
   if (validId(nativeValue('devtools', 'inspectedWindow', 'tabId')))
     return { kind: 'devtools', source: 'native' }
@@ -82,12 +86,8 @@ function snapshot(env: Environment): ContextInfo {
     const popup = views({ type: 'popup' })
     if (Array.isArray(popup) && popup.includes(env.window))
       return { kind: 'popup', source: 'native' }
-    // "sidebar" is Firefox-only; do not pass it to Chrome's enum validator.
-    if (nativeMethod('sidebarAction', 'open')) {
-      const sidebar = views({ type: 'sidebar' })
-      if (Array.isArray(sidebar) && sidebar.includes(env.window))
-        return { kind: 'side-panel', source: 'native' }
-    }
+    // Side panels are identified by resolve() only. Chrome has no synchronous
+    // evidence for them, so Firefox's `sidebar` view type is not used either.
     const tabs = views({ type: 'tab' })
     if (Array.isArray(tabs) && tabs.includes(env.window))
       return { kind: 'extension-page', source: 'native' }
@@ -183,17 +183,22 @@ function registered(info: ContextInfo, env: Environment): ContextInfo {
       'Registration contradicts the native context'
     )
   }
-  if (role.kind === 'background') {
-    return {
-      ...info,
-      kind: 'background',
-      implementation: env.worker ? 'service-worker' : 'page',
-      source: 'registered',
-    }
-  }
   return { ...info, ...role, source: 'registered' }
 }
 
+/**
+ * 現在の実行場所を同期的に返します。
+ *
+ * 同期的に確認できる情報と、直前の {@link resolve} の結果を使います。
+ * サイドパネルと popout は同期的には判定できないため、{@link resolve} を呼ぶまで `unknown` です。
+ *
+ * @example
+ * ```ts
+ * if (webextContext.get().kind === 'background') {
+ *   // Background の処理
+ * }
+ * ```
+ */
 function get(): ContextInfo {
   try {
     const env = currentEnvironment()
@@ -203,6 +208,19 @@ function get(): ContextInfo {
   }
 }
 
+/**
+ * ブラウザ API に問い合わせて現在の実行場所を判定します。
+ *
+ * タブ・ウィンドウ ID などの情報も取得します。結果は {@link get} からも参照できます。
+ *
+ * @throws {WebextError} 拡張機能の実行環境ではない場合は `CONTEXT_UNAVAILABLE`
+ *
+ * @example
+ * ```ts
+ * const context = await webextContext.resolve()
+ * console.log(context.kind, context.windowId)
+ * ```
+ */
 async function resolve(): Promise<ContextInfo> {
   try {
     const env = currentEnvironment()
@@ -275,13 +293,7 @@ async function resolve(): Promise<ContextInfo> {
       const self = candidates.length === 1 ? candidates[0] : undefined
       if (self) {
         const kind = kindOf(self, env)
-        if (kind === 'background')
-          info = {
-            kind,
-            implementation: env.worker ? 'service-worker' : 'page',
-            ...metadata(self),
-          }
-        else if (kind && kind !== 'popout' && kind !== 'content-script')
+        if (kind && kind !== 'popout' && kind !== 'content-script')
           info = { kind, ...metadata(self) }
       }
       // getCurrent describes this page, never the active/associated tab.
@@ -334,6 +346,22 @@ async function resolve(): Promise<ContextInfo> {
   }
 }
 
+/**
+ * 自動判定できない実行場所を宣言します。
+ *
+ * 次の場合にエントリーポイントの先頭で呼び出してください。
+ * - オプションページ: `{ kind: 'options' }`（タブで開いたページと区別できないため）
+ * - MAIN world の Content Script: `{ kind: 'content-script', world: 'MAIN' }`
+ *
+ * ブラウザから確認できる情報と矛盾する宣言は `INVALID_ARGUMENT` になります。
+ *
+ * @returns 宣言を取り消す関数
+ *
+ * @example
+ * ```ts
+ * webextContext.register({ kind: 'options' })
+ * ```
+ */
 function register(role: ContextRegistration): Unsubscribe {
   const value = object(role)
   const kinds = [
@@ -381,4 +409,21 @@ function register(role: ContextRegistration): Unsubscribe {
   }
 }
 
+/**
+ * 現在のコードの実行場所（Background・Content Script・ポップアップ・サイドパネルなど）を判定します。
+ *
+ * | 操作 | 説明 |
+ * | --- | --- |
+ * | {@link get} | 同期的に判定する |
+ * | {@link resolve} | ブラウザ API に問い合わせて判定する |
+ * | {@link register} | 自動判定できない実行場所を宣言する |
+ *
+ * @example
+ * ```ts
+ * import { webextContext } from '@midra/webext-utils/context'
+ *
+ * const context = await webextContext.resolve()
+ * console.log(context.kind) // 'popup' | 'side-panel' | ...
+ * ```
+ */
 export const webextContext = Object.freeze({ get, resolve, register })

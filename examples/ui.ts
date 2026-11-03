@@ -21,6 +21,8 @@ async function start() {
   // Verify the popout token before registering any receiving message handlers.
   const current = await webextPopout.getCurrent()
   const context = await webextContext.resolve()
+  // Announce the side panel so webextSidePanel.onOpened/onClosed work everywhere.
+  if (context.kind === 'side-panel') webextSidePanel.registerPanel()
   output.value = `${context.kind}: ${(await settings.get('theme')) ?? 'light'}`
   const stop = settings.watchAll(
     ['theme'],
@@ -41,14 +43,14 @@ async function start() {
       .open({
         source:
           current?.source ??
-          (context.kind === 'side-panel' ? 'sidePanel' : 'popup'),
+          (context.kind === 'side-panel' ? 'side-panel' : 'popup'),
         reuseKey: 'example',
       })
       .catch(showError)
   })
-  // Start the native operation directly within the click handler.
+  // Call it directly in the click handler, without awaiting anything first.
   document.querySelector('#panel')!.addEventListener('click', () => {
-    void webextSidePanel.open().catch(showError)
+    void webextSidePanel.toggle().catch(showError)
   })
   document.querySelector('#title')!.addEventListener('click', () => {
     void (async () => {

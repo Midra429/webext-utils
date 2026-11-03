@@ -1,5 +1,5 @@
-import type { Unsubscribe } from '../internal/errors'
-import type { Realm } from '../messaging/realm'
+import type { Unsubscribe } from '../internal/types'
+import type { MessageHub } from '../messaging/hub'
 import type { MessageSender, MessageTarget } from '../messaging/types'
 import type {
   StorageArea,
@@ -8,14 +8,14 @@ import type {
   StorageWatchOptions,
 } from './types'
 
+import { object } from '../internal/browser'
 import { nativeError } from '../internal/errors'
 import { assertJson } from '../internal/json'
-import { object } from '../internal/native'
 import { Environment } from '../messaging/environment'
-import { currentRealm } from '../messaging/shared'
-import { clone, equal, fail, key, keys, within } from './common'
+import { currentHub } from '../messaging/hub'
 import { StorageEngine } from './engine'
 import { subscription } from './subscription'
+import { clone, equal, fail, key, keys, segments, within } from './utils'
 
 const uuid = /^[0-9a-f-]{36}$/
 const RPC = '__webext_utils__storage_rpc_v1'
@@ -78,7 +78,7 @@ export class StorageRuntime {
   private backgroundEpoch = 0
   constructor(
     readonly env = new Environment(),
-    private realm: () => Realm = currentRealm,
+    private hub: () => MessageHub = currentHub,
     locks?: () => LockManager | undefined
   ) {
     this.engine = new StorageEngine(env, locks)
@@ -95,7 +95,7 @@ export class StorageRuntime {
     return 'direct'
   }
   private async send(value: unknown): Promise<unknown> {
-    return await this.realm().send(
+    return await this.hub().send(
       RPC,
       value,
       { target: { context: 'background' } },
@@ -215,7 +215,7 @@ export class StorageRuntime {
       receiver = `__webext_utils__storage_watch_${id}`,
       owner = {}
     let active = true
-    const stop = this.realm().on(
+    const stop = this.hub().on(
       owner,
       receiver,
       (value, sender) => {
@@ -239,7 +239,7 @@ export class StorageRuntime {
       true
     )
     let registered = false
-    const stopErrors = this.realm().observeRegistrationErrors((cause) => {
+    const stopErrors = this.hub().observeRegistrationErrors((cause) => {
       if (!registered || !active) return
       handle()
       try {
@@ -249,7 +249,7 @@ export class StorageRuntime {
       }
     })
     const registration = (async () => {
-      const instanceId = await this.realm().internalInstance()
+      const instanceId = await this.hub().internalInstance()
       if (!active) return
       await this.send({
         operation: 'subscribe',
@@ -324,7 +324,7 @@ export class StorageRuntime {
         try {
           // An empty notification tests this exact receiver without exposing data
           // or invoking a user's observer. Router reconnect verifies saved docs.
-          await this.realm().send(
+          await this.hub().send(
             sub.receiver,
             [],
             { target: sub.target, timeoutMs: 2000 },
@@ -391,7 +391,7 @@ export class StorageRuntime {
       instanceId,
     })
     const owner = {}
-    const stopRPC = this.realm().on(
+    const stopRPC = this.hub().on(
       owner,
       RPC,
       async (value, sender) => {
@@ -440,7 +440,7 @@ export class StorageRuntime {
             typeof v.prefix !== 'string'
           )
             throw fail('INVALID_ARGUMENT', 'Invalid storage subscription')
-          if (v.prefix) key(v.prefix)
+          if (v.prefix) segments(v.prefix)
           const selected = v.keys === undefined ? undefined : keys(v.keys)
           if (selected?.some((k) => !within(k, v.prefix as string)))
             throw fail('INVALID_ARGUMENT', 'Subscription outside namespace')
@@ -480,7 +480,7 @@ export class StorageRuntime {
             )
             if (!filtered.length) continue
             try {
-              await this.realm().send(
+              await this.hub().send(
                 sub.receiver,
                 filtered,
                 { target: sub.target },
@@ -505,7 +505,7 @@ export class StorageRuntime {
         })
       }
       stops.push(
-        this.realm().observeDisconnects((sender) => {
+        this.hub().observeDisconnects((sender) => {
           if (sender.context === 'content-script') prune(sender.tabId, false)
         })
       )

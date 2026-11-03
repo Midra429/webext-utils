@@ -1,11 +1,11 @@
-import type { Unsubscribe } from '../internal/errors'
+import type { Unsubscribe } from '../internal/types'
 import type { Port } from './port'
 import type { Endpoint, Reply, Request } from './protocol'
 import type { MessageSender, SendOptions } from './types'
 
+import { object } from '../internal/browser'
 import { WebextError, nativeError } from '../internal/errors'
 import { assertJson } from '../internal/json'
-import { object } from '../internal/native'
 import { Environment } from './environment'
 import { observe, port } from './port'
 import {
@@ -35,7 +35,7 @@ interface Registration {
   handler: Handler
   pending: Set<(error: WebextError) => void>
 }
-export class Realm {
+export class MessageHub {
   private handlers = new Map<string, Registration>()
   private instanceId = ''
   private generation = 0
@@ -73,11 +73,11 @@ export class Realm {
     }
   }
 
-  pageRealm(): Realm {
+  pageHub(): MessageHub {
     const context = this.env.context.get()
     if (context.kind !== 'content-script' || context.world !== 'ISOLATED')
       throw fail('CONTEXT_UNAVAILABLE', 'Page bridges require ISOLATED context')
-    return new Realm(this.env, true)
+    return new MessageHub(this.env, true)
   }
 
   startBackground(): Unsubscribe {
@@ -556,4 +556,11 @@ export class Realm {
       throw error
     }
   }
+}
+
+let shared: MessageHub | undefined
+
+/** Returns the hub shared by every messaging client in this JavaScript realm. */
+export function currentHub(): MessageHub {
+  return (shared ??= new MessageHub())
 }

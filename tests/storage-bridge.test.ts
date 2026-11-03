@@ -3,12 +3,12 @@ import type { StorageBackgroundOptions } from '../src/storage'
 
 import { describe, expect, test } from 'bun:test'
 
-import { IsolatedBridge } from '../src/messaging/page-bridge'
-import { PageClient } from '../src/messaging/page-client'
-import { PageEnvironment } from '../src/messaging/page-wire'
-import { Realm } from '../src/messaging/realm'
+import { MessageHub } from '../src/messaging/hub'
+import { IsolatedBridge } from '../src/messaging/page/bridge'
+import { PageClient } from '../src/messaging/page/client'
+import { PageEnvironment } from '../src/messaging/page/wire'
 import { createStorage } from '../src/storage/client'
-import { expose } from '../src/storage/page'
+import { expose } from '../src/storage/page-bridge'
 import { StorageRuntime } from '../src/storage/runtime'
 import { NativeBus } from './helpers/messaging-native'
 import { StorageNative } from './helpers/storage-native'
@@ -44,8 +44,8 @@ function setup(options?: StorageBackgroundOptions) {
     })
   for (const env of [bgEnv, csEnv])
     env.api.storage = { ...native.api, onChanged: native.onChanged }
-  const bg = new Realm(bgEnv.env),
-    cs = new Realm(csEnv.env)
+  const bg = new MessageHub(bgEnv.env),
+    cs = new MessageHub(csEnv.env)
   const stopRouter = bg.startBackground()
   const bgRuntime = new StorageRuntime(
     bgEnv.env,
@@ -279,7 +279,7 @@ describe('final review subscription registration and lifecycle', () => {
       documentId: 'new-doc',
     })
     native.api.storage = { ...s.native.api, onChanged: s.native.onChanged }
-    const realm = new Realm(native.env),
+    const realm = new MessageHub(native.env),
       runtime = new StorageRuntime(
         native.env,
         () => realm,
@@ -558,15 +558,15 @@ describe('MAIN storage policy', () => {
   }
   test('prototype-named keys survive RPC, MAIN reads and snapshot recovery', async () => {
     const s = pageSetup()
-    type Keys = { toString: string }
+    type Keys = { 'app.toString': string }
     const trusted = createStorage<Keys>({}, () => s.bgRuntime)
     const content = createStorage<Keys>({}, () => s.csRuntime)
     const page = createStorage<Keys>({ bridge: { channel: 'storage-public' } })
     const stopExpose = content.exposeToPage(s.bridge, {
-      read: ['toString'],
-      write: ['toString'],
-      watch: ['toString'],
-      validate: { toString: (v): v is string => typeof v === 'string' },
+      read: ['app.toString'],
+      write: ['app.toString'],
+      watch: ['app.toString'],
+      validate: { 'app.toString': (v): v is string => typeof v === 'string' },
     })
     const events: unknown[] = []
     let stop: (() => void) | undefined
@@ -576,25 +576,25 @@ describe('MAIN storage policy', () => {
       s.surface.window.dispatchEvent(event)
     }
     try {
-      expect(await content.get('toString')).toBeUndefined()
-      expect(await page.get('toString')).toBeUndefined()
-      const subscription = page.watch('toString', (c) => events.push(c))
+      expect(await content.get('app.toString')).toBeUndefined()
+      expect(await page.get('app.toString')).toBeUndefined()
+      const subscription = page.watch('app.toString', (c) => events.push(c))
       stop = subscription
       await subscription.ready
-      await page.set('toString', 'saved')
+      await page.set('app.toString', 'saved')
       await tick()
-      expect(await page.get('toString')).toBe('saved')
+      expect(await page.get('app.toString')).toBe('saved')
       lifecycle('pagehide')
       await tick()
-      await trusted.remove('toString')
+      await trusted.remove('app.toString')
       lifecycle('pageshow')
       await tick()
       await tick()
       expect(events).toEqual([
-        { key: 'toString', oldValue: undefined, newValue: 'saved' },
-        { key: 'toString', oldValue: 'saved', newValue: undefined },
+        { key: 'app.toString', oldValue: undefined, newValue: 'saved' },
+        { key: 'app.toString', oldValue: 'saved', newValue: undefined },
       ])
-      expect(await page.get('toString')).toBeUndefined()
+      expect(await page.get('app.toString')).toBeUndefined()
     } finally {
       stop?.()
       stopExpose()

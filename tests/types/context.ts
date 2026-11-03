@@ -19,7 +19,7 @@ const stop: Unsubscribe = webextContext.register({
 stop()
 if (info.kind === 'popout') {
   const id: number = info.windowId
-  const origin: 'popup' | 'sidePanel' = info.origin
+  const origin: 'popup' | 'side-panel' = info.origin
   const associated: number | undefined = info.associatedTabId
   void [id, origin, associated]
 }
@@ -28,8 +28,8 @@ if (info.kind === 'content-script') {
   void world
 }
 if (info.kind === 'background') {
-  const implementation: 'service-worker' | 'page' = info.implementation
-  void implementation
+  // @ts-expect-error the Background implementation differs per browser and is not exposed
+  void info.implementation
 }
 // @ts-expect-error popout-only metadata requires narrowing
 info.origin

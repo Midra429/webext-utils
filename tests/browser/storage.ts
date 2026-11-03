@@ -1,7 +1,7 @@
-import { nativeMethod } from '../../src/internal/native'
+import { nativeMethod } from '../../src/internal/browser'
 import { webextMessaging } from '../../src/messaging'
 import { webextStorage } from '../../src/storage'
-import { JOURNAL, META } from '../../src/storage/common'
+import { JOURNAL, META } from '../../src/storage/utils'
 import { bridgeResult } from './bridge'
 import { testOrigin } from './report'
 

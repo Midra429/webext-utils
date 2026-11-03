@@ -2,8 +2,8 @@ import type { ContextInfo } from '../context'
 import type { MessageSender } from './types'
 
 import { webextContext } from '../context'
+import { nativeMethod, nativeValue } from '../internal/browser'
 import { nativeError } from '../internal/errors'
-import { nativeMethod, nativeValue } from '../internal/native'
 import { fail, sender } from './protocol'
 
 // A narrow native boundary, also used by deterministic multi-realm tests.

@@ -1,5 +1,5 @@
 import { webextContext } from '../../src/context'
-import { nativeMethod } from '../../src/internal/native'
+import { nativeMethod } from '../../src/internal/browser'
 import { webextMessaging } from '../../src/messaging'
 import { webextPopout } from '../../src/popout'
 import { webextStorage } from '../../src/storage'

@@ -1,4 +1,4 @@
-import { nativeMethod, object } from '../../src/internal/native'
+import { nativeMethod, object } from '../../src/internal/browser'
 import { webextMessaging } from '../../src/messaging'
 
 const messaging = webextMessaging<{ where: { data: void; response: number } }>()

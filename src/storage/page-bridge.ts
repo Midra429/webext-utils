@@ -1,5 +1,5 @@
-import type { Unsubscribe } from '../internal/errors'
-import type { ServiceClient } from '../messaging/page-services'
+import type { Unsubscribe } from '../internal/types'
+import type { ServiceClient } from '../messaging/page/services'
 import type { PageBridge, PageBridgeLimits } from '../messaging/types'
 import type { Change, Operation, StorageRuntime } from './runtime'
 import type {
@@ -9,18 +9,18 @@ import type {
   StorageWatchOptions,
 } from './types'
 
+import { object } from '../internal/browser'
 import { WebextError, nativeError } from '../internal/errors'
 import { assertJson } from '../internal/json'
-import { object } from '../internal/native'
-import { PageClient } from '../messaging/page-client'
+import { PageClient } from '../messaging/page/client'
 import {
   registerService,
   serviceClients,
   serviceHosts,
-} from '../messaging/page-services'
-import { equal, fail, key, within } from './common'
+} from '../messaging/page/services'
 import { parseRequest } from './runtime'
 import { subscription } from './subscription'
+import { equal, fail, join, key, segments, within } from './utils'
 
 type Rule = {
   area: StorageArea
@@ -99,7 +99,7 @@ class Hub {
     if (watching && v.keys === undefined) {
       if (typeof v.prefix !== 'string')
         throw fail('INVALID_ARGUMENT', 'Invalid watch namespace')
-      if (v.prefix) key(v.prefix)
+      if (v.prefix) segments(v.prefix)
       expanded = [
         ...new Set(
           [...this.rules]
@@ -210,12 +210,7 @@ export function expose<S>(
   if (runtime.mode() !== 'rpc')
     throw fail('CONTEXT_UNAVAILABLE', 'Storage exposure requires ISOLATED')
   const expand = (names: readonly string[] = []) =>
-    new Set(
-      names.map((k) => {
-        key(k)
-        return prefix ? `${prefix}.${k}` : k
-      })
-    )
+    new Set(names.map((k) => join(prefix, k)))
   const rule: Rule = {
     runtime,
     area,
@@ -225,12 +220,10 @@ export function expose<S>(
     validate: {},
   }
   for (const [k, fn] of Object.entries(policy.validate)) {
-    key(k)
+    const full = join(prefix, k)
     if (typeof fn !== 'function')
       throw fail('INVALID_ARGUMENT', 'Invalid page storage validator')
-    rule.validate[prefix ? `${prefix}.${k}` : k] = fn as (
-      value: unknown
-    ) => boolean
+    rule.validate[full] = fn as (value: unknown) => boolean
   }
   for (const k of new Set([...rule.read, ...rule.write, ...rule.watch]))
     if (!Object.hasOwn(rule.validate, k))

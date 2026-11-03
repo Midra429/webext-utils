@@ -1,16 +1,16 @@
 import { writeFile } from 'node:fs/promises'
 
-import { Realm } from '../src/messaging/realm'
+import { MessageHub } from '../src/messaging/hub'
 import { NativeBus } from '../tests/helpers/messaging-native'
 
 // Deterministic native-boundary measurement, not a browser benchmark.
 const bus = new NativeBus()
-const background = new Realm(bus.realm('background').env)
+const background = new MessageHub(bus.realm('background').env)
 const view = bus.realm('extension-page')
-const receiver = new Realm(view.env)
-const sender = new Realm(bus.realm('extension-page').env)
+const receiver = new MessageHub(view.env)
+const sender = new MessageHub(bus.realm('extension-page').env)
 const owner = {}
-const pending: Parameters<Realm['send']>[4] = new Set()
+const pending: Parameters<MessageHub['send']>[4] = new Set()
 const snapshot = () => ({
   ports: bus.activePorts(),
   listeners: bus.realms.reduce(

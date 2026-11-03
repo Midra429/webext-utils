@@ -13,7 +13,7 @@
       "@midra/webext-utils/context": ["../../src/context/index.ts"],
       "@midra/webext-utils/messaging": ["../../src/messaging/index.ts"],
       "@midra/webext-utils/storage": ["../../src/storage/index.ts"],
-      "@midra/webext-utils/sidePanel": ["../../src/sidePanel/index.ts"],
+      "@midra/webext-utils/side-panel": ["../../src/side-panel/index.ts"],
       "@midra/webext-utils/popout": ["../../src/popout/index.ts"]
     }
   },
@@ -21,7 +21,7 @@
     "context.ts",
     "messaging.ts",
     "storage.ts",
-    "sidePanel.ts",
+    "side-panel.ts",
     "popout.ts"
   ]
 }

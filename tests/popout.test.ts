@@ -8,8 +8,8 @@ import {
   POPOUT_PARAM as PARAM,
   POPOUT_KEY_PREFIX as PREFIX,
 } from '../src/internal/popout-record'
+import { currentHub } from '../src/messaging/hub'
 import { success } from '../src/messaging/protocol'
-import { currentRealm } from '../src/messaging/shared'
 import { webextPopout as popout } from '../src/popout'
 import { PopoutManager } from '../src/popout/manager'
 
@@ -101,6 +101,7 @@ function fixture(firefox = false) {
     ...(firefox
       ? {
           sidebarAction: {
+            async open() {},
             async getPanel(target: unknown) {
               calls.push({ path: 'getPanel', args: [target] })
               return base + 'panel.html'
@@ -109,6 +110,7 @@ function fixture(firefox = false) {
         }
       : {
           sidePanel: {
+            async open() {},
             async getOptions(target: unknown) {
               calls.push({ path: 'getOptions', args: [target] })
               return { path: 'panel.html', enabled: true }
@@ -232,12 +234,18 @@ describe('popout', () => {
     })
     test(`${firefox ? 'Firefox' : 'Chrome'} source window resolution and side panel discovery`, async () => {
       const f = fixture(firefox)
-      const h = await popout.open({
-        source: 'sidePanel',
+      const p = await popout.open({
+        source: 'popup',
         sourceTarget: { windowId: 2 },
       })
+      // A window is resolved to its active tab in every browser.
+      expect(p.sourceTarget).toEqual({ tabId: 7 })
+      expect(f.calls.find((c) => c.path === 'getPopup')?.args).toEqual([
+        { tabId: 7 },
+      ])
+      const h = await popout.open({ source: 'side-panel' })
       expect(h.page).toBe(f.base + 'panel.html')
-      expect(h.sourceTarget).toEqual(firefox ? { windowId: 2 } : { tabId: 7 })
+      expect(h.sourceTarget).toBeUndefined()
       expect(h.associatedTabId).toBeUndefined()
       expect(await h.tabExists()).toBe(false)
       await expect(h.getTab()).rejects.toMatchObject({
@@ -256,7 +264,7 @@ describe('popout', () => {
     expect(b.bounds.width).toBe(482)
     expect(f.calls.filter((c) => c.path === 'create')).toHaveLength(1)
     await expect(
-      popout.open({ source: 'sidePanel', reuseKey: 'one' })
+      popout.open({ source: 'side-panel', reuseKey: 'one' })
     ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
     await expect(
       popout.open({ source: 'popup', reuseKey: 'one', associatedTabId: 7 })
@@ -290,7 +298,7 @@ describe('popout', () => {
       height: 600,
     })
   })
-  test('missing native discovery falls back, empty/error/disabled does not', async () => {
+  test('missing native discovery falls back, empty/error does not', async () => {
     const f = fixture()
     Reflect.deleteProperty(f.api.action, 'getPopup')
     expect((await popout.open({ source: 'popup' })).page).toBe(
@@ -307,12 +315,11 @@ describe('popout', () => {
       code: 'PERMISSION_DENIED',
     })
     if ('sidePanel' in f.api)
-      f.api.sidePanel.getOptions = async () => ({
-        path: 'panel.html',
-        enabled: false,
-      })
-    await expect(popout.open({ source: 'sidePanel' })).rejects.toMatchObject({
-      code: 'CONTEXT_UNAVAILABLE',
+      f.api.sidePanel.getOptions = async () => {
+        throw new Error('permission denied')
+      }
+    await expect(popout.open({ source: 'side-panel' })).rejects.toMatchObject({
+      code: 'PERMISSION_DENIED',
     })
   })
   test('invalid arguments are rejected before creation', async () => {
@@ -602,7 +609,7 @@ describe('popout', () => {
     const f = fixture(),
       stop = f.manager.startBackground()
     const invoke = async (sender: MessageSender, value: unknown) =>
-      await currentRealm().dispatch(
+      await currentHub().dispatch(
         {
           protocol: '@midra/webext-utils/messaging',
           version: 1,
@@ -679,7 +686,7 @@ describe('popout', () => {
       f.api.windows.remove = async () => {
         throw Error('compensation failure')
       }
-      const reply = await currentRealm().dispatch(
+      const reply = await currentHub().dispatch(
         {
           protocol: '@midra/webext-utils/messaging',
           version: 1,
@@ -715,7 +722,7 @@ describe('popout', () => {
       stop()
     }
   })
-  test('closeOriginal confirms popup closure and reports a native side panel close failure independently', async () => {
+  test('closeOriginal closes the calling popup and is unsupported elsewhere', async () => {
     const f = fixture()
     Reflect.set(f.api.extension, 'getBackgroundPage', () => undefined)
     Reflect.set(f.api.extension, 'getViews', (q: { type: string }) =>
@@ -727,31 +734,16 @@ describe('popout', () => {
       (await popout.open({ source: 'popup', closeOriginal: true }))
         .originalUiClose.status
     ).toBe('closed')
-    global('location', { href: f.base + 'source-panel.html' })
     Reflect.set(f.api.extension, 'getViews', () => [])
-    Reflect.set(f.api.windows, 'getCurrent', async () => ({ id: 50 }))
-    f.api.tabs.getCurrent = async () => undefined as never
-    Reflect.set(f.api.runtime, 'getContexts', async () => [
-      {
-        contextType: 'SIDE_PANEL',
-        documentUrl: f.base + 'source-panel.html',
-        windowId: 50,
-        tabId: -1,
-        frameId: 0,
-      },
-    ])
-    if ('sidePanel' in f.api)
-      Reflect.set(f.api.sidePanel, 'close', async () => {
-        throw Error('user gesture required')
-      })
-    const result = await popout.open({
-      source: 'sidePanel',
-      closeOriginal: true,
-    })
-    expect(result.originalUiClose).toMatchObject({
-      status: 'failed',
-      error: { code: 'USER_GESTURE_REQUIRED' },
-    })
+    global('location', { href: f.base + 'page.html' })
+    const result = await popout.open({ source: 'popup', closeOriginal: true })
+    expect(result.originalUiClose.status).toBe('unsupported')
     expect(result.windowId).toBeGreaterThan(0)
+    await expect(
+      popout.open({ source: 'side-panel', closeOriginal: true } as never)
+    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    await expect(
+      popout.open({ source: 'side-panel', sourceTarget: { tabId: 1 } } as never)
+    ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
   })
 })

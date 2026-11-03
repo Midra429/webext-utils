@@ -1,4 +1,4 @@
-import { nativeMethod } from '../../src/internal/native'
+import { nativeMethod } from '../../src/internal/browser'
 import { webextMessaging } from '../../src/messaging'
 import { webextStorage } from '../../src/storage'
 

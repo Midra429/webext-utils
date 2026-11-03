@@ -1,6 +1,6 @@
 import type { StorageArea } from '../../src/storage'
 
-import { object } from '../../src/internal/native'
+import { object } from '../../src/internal/browser'
 import { Environment } from '../../src/messaging/environment'
 import { Event } from './messaging-native'
 

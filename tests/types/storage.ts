@@ -89,14 +89,15 @@ await settings.migrate({
 })
 webextStorage<Schema>({
   validate: {
-    'settings.theme': (value) => {
-      if (value !== 'dark' && value !== 'light') throw Error('Invalid theme')
-      return value
-    },
+    'settings.theme': (value): value is 'dark' | 'light' =>
+      value === 'dark' || value === 'light',
   },
 })
-// @ts-expect-error parser must return the corresponding value
-webextStorage<Schema>({ validate: { 'settings.theme': () => 42 } })
+// @ts-expect-error validators are type guards for the corresponding value
+webextStorage<Schema>({ validate: { 'settings.theme': () => true } })
+const numberGuard = (v: unknown): v is number => typeof v === 'number'
+// @ts-expect-error the guarded type must match the schema
+webextStorage<Schema>({ validate: { 'settings.theme': numberGuard } })
 // @ts-expect-error schemas must be JSON
 webextStorage<{ callback: () => void }>()
 // @ts-expect-error invalid area

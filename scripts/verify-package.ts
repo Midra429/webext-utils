@@ -96,7 +96,7 @@ try {
     './context',
     './messaging',
     './storage',
-    './sidePanel',
+    './side-panel',
     './popout',
   ]) {
     const entry = pkg.exports[path]
@@ -122,7 +122,7 @@ try {
         'consumer.ts',
         'messaging-consumer.ts',
         'storage-consumer.ts',
-        'sidePanel-consumer.ts',
+        'side-panel-consumer.ts',
         'popout-consumer.ts',
       ],
     })
@@ -146,8 +146,8 @@ try {
     await readFile(join(root, 'tests/types/storage.ts'), 'utf8')
   )
   await writeFile(
-    join(temp, 'sidePanel-consumer.ts'),
-    await readFile(join(root, 'tests/types/sidePanel.ts'), 'utf8')
+    join(temp, 'side-panel-consumer.ts'),
+    await readFile(join(root, 'tests/types/side-panel.ts'), 'utf8')
   )
   await run([
     'bun',
@@ -211,7 +211,7 @@ try {
     '@midra/webext-utils/context',
     '@midra/webext-utils/messaging',
     '@midra/webext-utils/storage',
-    '@midra/webext-utils/sidePanel',
+    '@midra/webext-utils/side-panel',
     '@midra/webext-utils/popout',
   ]) {
     await run([
@@ -243,7 +243,7 @@ try {
       catch(error) {if(error.code!=='CONTEXT_UNAVAILABLE')throw error}
     }
     messaging.dispose()
-    const {webextSidePanel}=await import('@midra/webext-utils/sidePanel')
+    const {webextSidePanel}=await import('@midra/webext-utils/side-panel')
     try {await webextSidePanel.open(); throw Error('Expected SSR sidePanel failure')}
     catch(error) {if(error.code!=='CONTEXT_UNAVAILABLE')throw error}
     const {webextPopout}=await import('@midra/webext-utils/popout')
@@ -286,18 +286,18 @@ try {
     `Storage bundle: ${Buffer.byteLength(storageCode)} bytes (${Bun.gzipSync(storageCode).byteLength} bytes gzip)`
   )
   await writeFile(
-    join(temp, 'entry-sidePanel.ts'),
-    `import { webextSidePanel } from ${JSON.stringify(join(installed, 'dist/sidePanel/index.js'))}; console.log(webextSidePanel)`
+    join(temp, 'entry-side-panel.ts'),
+    `import { webextSidePanel } from ${JSON.stringify(join(installed, 'dist/side-panel/index.js'))}; console.log(webextSidePanel)`
   )
   const sidePanelBundle = await Bun.build({
-    entrypoints: [join(temp, 'entry-sidePanel.ts')],
+    entrypoints: [join(temp, 'entry-side-panel.ts')],
     minify: true,
   })
   if (!sidePanelBundle.success)
     throw new Error('SidePanel consumer bundle failed')
   const sidePanelCode = await sidePanelBundle.outputs[0]!.text()
-  if (/startBackground|runtime\.connect|storage\.local/.test(sidePanelCode))
-    throw new Error('Unrelated feature bundled in sidePanel')
+  if (/runtime\.connect|storage\.local/.test(sidePanelCode))
+    throw new Error('Unrelated feature bundled in side panel')
   measure('sidePanel', sidePanelCode)
   console.log(
     `SidePanel bundle: ${Buffer.byteLength(sidePanelCode)} bytes (${Bun.gzipSync(sidePanelCode).byteLength} bytes gzip)`

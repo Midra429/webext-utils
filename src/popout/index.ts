@@ -1,5 +1,10 @@
+/**
+ * ポップアップやサイドパネルと同じ HTML を、独立したウィンドウ（popout）で開くモジュールです。
+ *
+ * @module
+ */
 import type { ContextInfo } from '../context'
-import type { Unsubscribe } from '../internal/errors'
+import type { Unsubscribe } from '../internal/types'
 import type { Ready } from './manager'
 import type {
   OriginalUiClose,
@@ -9,20 +14,26 @@ import type {
 } from './types'
 
 import { webextContext } from '../context'
-import { isExtensionUrl, parseUrl } from '../internal/extension-url'
-import { nativeMethod, object, validId } from '../internal/native'
+import { nativeMethod, object, validId } from '../internal/browser'
 import { popoutPage, popoutToken } from '../internal/popout-record'
-import { webextSidePanel } from '../sidePanel'
-import { call, convert, fail, id, options } from './common'
+import { isExtensionUrl, parseUrl } from '../internal/url'
 import { manager, request } from './manager'
+import { call, convert, fail, id, options } from './utils'
 
-export type { ErrorCode, Unsubscribe } from '../internal/errors'
+export type { ErrorCode, WebextErrorOptions } from '../internal/errors'
+export type { Subscription, Unsubscribe } from '../internal/types'
 export type {
   OriginalUiClose,
+  PopoutBaseOptions,
   PopoutBounds,
   PopoutHandle,
+  PopoutMessageTargetOptions,
   PopoutOptions,
+  PopoutSource,
+  PopoutSourceTarget,
   PopoutTab,
+  PopupPopoutOptions,
+  SidePanelPopoutOptions,
 } from './types'
 
 export { WebextError, isWebextError } from '../internal/errors'
@@ -61,7 +72,7 @@ function handle(
       ...(record.options.sourceTarget
         ? { sourceTarget: Object.freeze({ ...record.options.sourceTarget }) }
         : {}),
-    }),
+    }) as Readonly<PopoutOptions>,
     originalUiClose: Object.freeze(originalUiClose),
     async close() {
       await request('close', { windowId: record.windowId, token: record.token })
@@ -116,48 +127,39 @@ function handle(
   })
 }
 
-async function closeOriginal(
-  context: ContextInfo | undefined,
-  source: PopoutOptions['source']
-): Promise<OriginalUiClose> {
-  if (
-    !context ||
-    (source === 'popup'
-      ? context.kind !== 'popup'
-      : context.kind !== 'side-panel')
-  )
-    return { status: 'unsupported' }
+/** Closes the calling Action Popup. Only popups can be closed in every browser. */
+function closeOriginal(context: ContextInfo | undefined): OriginalUiClose {
+  if (context?.kind !== 'popup') return { status: 'unsupported' }
   try {
-    if (source === 'popup') {
-      if (typeof globalThis.window?.close !== 'function')
-        return { status: 'unsupported' }
-      globalThis.window.close()
-      return globalThis.window.closed
-        ? { status: 'closed' }
-        : { status: 'unsupported' }
-    }
-    // A tab-specific panel must not accidentally close a global panel.
-    if (context.tabId !== undefined)
-      await webextSidePanel.close({ tabId: context.tabId })
-    else if (
-      context.windowId !== undefined &&
-      webextSidePanel.getCapabilities().close.window
-    )
-      await webextSidePanel.close({ windowId: context.windowId })
-    else if (context.windowId !== undefined) {
-      const active = object(await call(['windows', 'getLastFocused']))
-      if (active?.id !== context.windowId) return { status: 'unsupported' }
-      await webextSidePanel.close()
-    } else return { status: 'unsupported' }
-    return { status: 'closed' }
+    if (typeof globalThis.window?.close !== 'function')
+      return { status: 'unsupported' }
+    globalThis.window.close()
+    return globalThis.window.closed
+      ? { status: 'closed' }
+      : { status: 'unsupported' }
   } catch (cause) {
-    const error = convert(cause)
-    return error.code === 'UNSUPPORTED_OPERATION'
-      ? { status: 'unsupported' }
-      : { status: 'failed', error }
+    return { status: 'failed', error: convert(cause) }
   }
 }
 
+/**
+ * popout ウィンドウを開きます。
+ *
+ * 拡張機能のページと Background から呼び出せます。Background で
+ * `webextMessaging.startBackground()` と `webextPopout.startBackground()` の登録が必要です。
+ *
+ * @throws {WebextError} ページを特定できない場合は `CONTEXT_UNAVAILABLE`、引数が不正なら `INVALID_ARGUMENT`
+ *
+ * @example
+ * ```ts
+ * const popout = await webextPopout.open({
+ *   source: 'side-panel',
+ *   associatedTabId: 42,
+ *   reuseKey: 'inspector-42',
+ * })
+ * console.log(popout.windowId)
+ * ```
+ */
 async function open(value: PopoutOptions): Promise<PopoutHandle> {
   const opts = options(value)
   let context: ContextInfo | undefined
@@ -173,17 +175,32 @@ async function open(value: PopoutOptions): Promise<PopoutHandle> {
   if (!record) fail('NATIVE_ERROR', 'Popout creation returned no record')
   return handle(
     record,
-    originalFailure ??
-      (opts.closeOriginal
-        ? await closeOriginal(context, opts.source)
-        : undefined)
+    originalFailure ?? (opts.closeOriginal ? closeOriginal(context) : undefined)
   )
 }
+/**
+ * ウィンドウ ID から popout のハンドルを取得します。
+ *
+ * @returns このライブラリで開いた popout でなければ `undefined`
+ */
 async function get(windowId: number): Promise<PopoutHandle | undefined> {
   id(windowId)
   const record = await request('get', { windowId })
   return record ? handle(record) : undefined
 }
+/**
+ * 現在のページが popout として開かれている場合、そのハンドルを返します。
+ *
+ * ポップアップ・サイドパネルと popout で同じ HTML を使う場合に、表示形態を判別できます。
+ *
+ * @returns popout でなければ `undefined`
+ *
+ * @example
+ * ```ts
+ * const current = await webextPopout.getCurrent()
+ * if (current) document.body.classList.add('popout')
+ * ```
+ */
 async function getCurrent(): Promise<PopoutHandle | undefined> {
   if (
     !globalThis.window ||
@@ -206,14 +223,42 @@ async function getCurrent(): Promise<PopoutHandle | undefined> {
     ? handle(record)
     : undefined
 }
+/**
+ * popout ウィンドウを閉じます。このライブラリで開いた popout 以外には何もしません。
+ */
 async function close(windowId: number): Promise<void> {
   id(windowId)
   await request('close', { windowId })
 }
+/**
+ * Background で popout の管理を開始します。
+ *
+ * Background のスクリプトの最上位で、`webextMessaging.startBackground()` の後、
+ * 最初の `await` より前に呼び出してください。
+ *
+ * @returns 登録を解除する関数
+ */
 function startBackground(): Unsubscribe {
   return manager.startBackground()
 }
 
+/**
+ * ポップアップ・サイドパネルと同じ HTML を独立したウィンドウ（popout）で開きます。
+ *
+ * | 操作 | 説明 |
+ * | --- | --- |
+ * | {@link open} | popout を開く |
+ * | {@link getCurrent} | 現在のページの popout ハンドル |
+ * | {@link get} / {@link close} | ウィンドウ ID で取得・閉じる |
+ * | {@link startBackground} | Background での管理を開始する |
+ *
+ * @example
+ * ```ts
+ * import { webextPopout } from '@midra/webext-utils/popout'
+ *
+ * await webextPopout.open({ source: 'popup', reuseKey: 'main' })
+ * ```
+ */
 export const webextPopout = Object.freeze({
   open,
   get,

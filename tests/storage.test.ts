@@ -1,11 +1,11 @@
-import type { StorageArea } from '../src/storage'
+import type { StorageArea, StorageClient } from '../src/storage'
 
 import { describe, expect, test } from 'bun:test'
 
 import { webextStorage } from '../src/storage'
 import { createStorage } from '../src/storage/client'
-import { JOURNAL, META, SYNC_JOURNAL } from '../src/storage/common'
 import { StorageRuntime } from '../src/storage/runtime'
+import { JOURNAL, META, SYNC_JOURNAL } from '../src/storage/utils'
 import { StorageNative } from './helpers/storage-native'
 
 type Schema = {
@@ -41,20 +41,42 @@ const plan = {
   },
 }
 describe('storage CRUD and watch', () => {
-  test('prototype-named keys remain ordinary optional storage keys', async () => {
-    const { runtime } = setup()
-    const storage = createStorage<Record<string, string>>({}, () => runtime)
-    for (const name of ['toString', 'valueOf', 'hasOwnProperty']) {
-      expect(await storage.get(name)).toBeUndefined()
-      await storage.set(name, 'saved')
-      expect(await storage.get(name)).toBe('saved')
-      await storage.remove(name)
-      expect(await storage.get(name)).toBeUndefined()
+  test('top-level prototype names are rejected; namespaced ones are ordinary keys', async () => {
+    const { runtime, native } = setup()
+    type Loose = StorageClient<Record<string, string>> & {
+      namespace(prefix: string): Loose
     }
+    const storage = createStorage<Record<string, string>>(
+      {},
+      () => runtime
+    ) as Loose
+    for (const name of ['toString', 'valueOf', 'hasOwnProperty']) {
+      await expect(storage.get(name)).rejects.toMatchObject({
+        code: 'INVALID_ARGUMENT',
+      })
+      await expect(storage.set(name, 'x')).rejects.toMatchObject({
+        code: 'INVALID_ARGUMENT',
+      })
+    }
+    expect(native.calls).toHaveLength(0)
+    const app = storage.namespace('app')
+    for (const name of ['toString', 'valueOf', 'hasOwnProperty']) {
+      expect(await app.get(name)).toBeUndefined()
+      await app.set(name, 'saved')
+      expect(await app.get(name)).toBe('saved')
+      await app.remove(name)
+      expect(await app.get(name)).toBeUndefined()
+    }
+    // A namespace may itself use such a name.
+    await storage.namespace('toString').set('value', 'ok')
+    expect(native.data.local['toString.value']).toBe('ok')
   })
   test('migration drafts and versions do not read inherited properties', async () => {
     const { runtime } = setup()
-    const storage = createStorage<Record<string, string>>({}, () => runtime)
+    const storage = createStorage<{ 'app.toString': string }>(
+      {},
+      () => runtime
+    ).namespace('app')
     await storage.migrate({
       version: 1,
       steps: {
@@ -165,20 +187,24 @@ describe('storage CRUD and watch', () => {
     ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
     expect(native.calls).toHaveLength(0)
   })
-  test('parsers validate reads and full batches before a write', async () => {
+  test('validators check reads and full batches before a write', async () => {
     const { native, runtime } = setup()
     const storage = createStorage<Schema>(
       {
         validate: {
-          'settings.theme': (value) => {
-            if (value !== 'light' && value !== 'dark') throw Error('bad')
-            return value
+          'settings.theme': (value): value is 'light' | 'dark' => {
+            if (value === 'broken') throw Error('bad')
+            return value === 'light' || value === 'dark'
           },
         },
       },
       () => runtime
     )
     native.data.local['settings.theme'] = 'legacy'
+    await expect(storage.get('settings.theme')).rejects.toMatchObject({
+      code: 'VALIDATION_ERROR',
+    })
+    native.data.local['settings.theme'] = 'broken'
     await expect(storage.get('settings.theme')).rejects.toMatchObject({
       code: 'VALIDATION_ERROR',
       cause: expect.any(Error),

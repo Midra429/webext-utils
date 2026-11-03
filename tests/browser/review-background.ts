@@ -1,7 +1,7 @@
-import { nativeMethod, object } from '../../src/internal/native'
+import { nativeMethod, object } from '../../src/internal/browser'
 import { webextMessaging } from '../../src/messaging'
 import { webextStorage } from '../../src/storage'
-import { JOURNAL, META } from '../../src/storage/common'
+import { JOURNAL, META } from '../../src/storage/utils'
 import { bridgeResult } from './bridge'
 
 const messaging = webextMessaging<{ where: { data: void; response: number } }>()
