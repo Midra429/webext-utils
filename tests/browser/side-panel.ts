@@ -10,6 +10,27 @@ const opened: SidePanelEvent[] = [],
 let stopOpened = () => {},
   stopClosed = () => {}
 let windowId = 0
+let tabId = 0
+
+/** The URL currently shown in the side panel (document of the panel). */
+async function panelUrl(): Promise<unknown> {
+  const contexts = (await nativeMethod(
+    'runtime',
+    'getContexts'
+  )?.({
+    contextTypes: ['SIDE_PANEL'],
+  })) as { documentUrl?: string }[]
+  return contexts.length === 1 ? contexts[0]?.documentUrl : contexts.length
+}
+async function shows(path: string) {
+  const deadline = Date.now() + 4000
+  let last: unknown
+  while ((last = await panelUrl()) !== url(path)) {
+    if (Date.now() > deadline)
+      throw new Error(`Panel shows ${String(last)}, expected ${path}`)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+  }
+}
 
 function assert(value: unknown, message: string): asserts value {
   if (!value) throw new Error(message)
@@ -145,6 +166,69 @@ const steps: [string, () => Promise<void>][] = [
     async () => {
       await panel.close()
       assert(!(await panel.isOpen()), 'Closed at the end')
+      // Prepare the next steps: a window page and listeners again.
+      await panel.setPage('panel.html?window', { windowId })
+      stopOpened = panel.onOpened((event) => opened.push(event))
+      stopClosed = panel.onClosed((event) => closed.push(event))
+    },
+  ],
+  [
+    'sidePanel:route-window',
+    async () => {
+      const count = opened.length
+      await panel.open()
+      await until(() => opened.length > count, 'opened event')
+      assert(
+        opened.at(-1)?.page === url('panel.html?window'),
+        `Opened page: ${opened.at(-1)?.page}`
+      )
+      await shows('panel.html?window')
+    },
+  ],
+  [
+    'sidePanel:route-tab',
+    async () => {
+      const events = opened.length + closed.length
+      // A page for the active tab applies at once.
+      await panel.setPage('panel.html?tab', { tabId })
+      await shows('panel.html?tab')
+      // Another active tab shows the window page; returning shows the tab page.
+      const other = (await nativeMethod(
+        'tabs',
+        'create'
+      )?.({
+        windowId,
+        url: url('panel.html?other-tab'),
+        active: true,
+      })) as { id: number }
+      await shows('panel.html?window')
+      await nativeMethod('tabs', 'update')?.(tabId, { active: true })
+      await shows('panel.html?tab')
+      await nativeMethod('tabs', 'remove')?.(other.id)
+      assert(await panel.isOpen(), 'Still open after switching pages')
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      assert(
+        opened.length + closed.length === events,
+        'Switching pages publishes no events'
+      )
+    },
+  ],
+  [
+    'sidePanel:route-close',
+    async () => {
+      const count = closed.length
+      await panel.close()
+      await until(() => closed.length > count, 'closed event')
+      assert(
+        closed.at(-1)?.page === url('panel.html?tab'),
+        `Closed page: ${closed.at(-1)?.page}`
+      )
+      await panel.resetPage({ tabId })
+      await panel.resetPage({ windowId })
+      assert(
+        (await panel.getPage({ tabId })) === url('panel.html?global#route'),
+        'Scoped pages removed'
+      )
     },
   ],
 ]
@@ -164,9 +248,11 @@ button.addEventListener('click', () => {
 void (async () => {
   await report('sidePanel:configuration', async () => {
     const tab = (await nativeMethod('tabs', 'getCurrent')?.()) as {
+      id: number
       windowId: number
     }
     windowId = tab.windowId
+    tabId = tab.id
     assert((await panel.getPage()) === url('panel.html'), 'Manifest page')
     await panel.setPage('panel.html?global#route')
     assert(
@@ -179,6 +265,27 @@ void (async () => {
     await rejects(
       () => panel.setPage('https://example.com'),
       'INVALID_ARGUMENT'
+    )
+    // Window and tab pages: tab > window > global.
+    await panel.setPage('panel.html?window', { windowId })
+    await panel.setPage('panel.html?tab', { tabId })
+    assert(
+      (await panel.getPage({ tabId })) === url('panel.html?tab'),
+      'Tab page'
+    )
+    assert(
+      (await panel.getPage({ windowId })) === url('panel.html?window'),
+      'Window page'
+    )
+    await panel.resetPage({ tabId })
+    assert(
+      (await panel.getPage({ tabId })) === url('panel.html?window'),
+      'Tab inherits the window page'
+    )
+    await panel.resetPage({ windowId })
+    assert(
+      (await panel.getPage({ tabId })) === url('panel.html?global#route'),
+      'Tab inherits the global page'
     )
     assert(!(await panel.isOpen({ windowId })), 'Initially closed')
     stopOpened = panel.onOpened((event) => opened.push(event))

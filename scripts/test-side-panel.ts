@@ -9,7 +9,7 @@ const manual = process.argv.includes('--manual')
 const temp = await mkdtemp(join(tmpdir(), 'webext-side-panel-'))
 const profile = await mkdtemp(join(tmpdir(), 'webext-side-profile-'))
 // Two automatic reports, then one report per clicked step.
-const STEPS = 8
+const STEPS = 11
 const REPORTS = STEPS + 2
 let readyStep = -1
 const results: { name: string; passed: boolean; error?: string }[] = []
@@ -105,7 +105,7 @@ try {
       manifest_version: 3,
       name: 'webext-utils side panel test',
       version: '0.0.1',
-      permissions: firefox ? [] : ['sidePanel'],
+      permissions: firefox ? ['storage'] : ['storage', 'sidePanel'],
       host_permissions: ['http://127.0.0.1/*'],
       action: {},
       ...(firefox

@@ -9,6 +9,7 @@ import type {
   SidePanelBackgroundOptions,
   SidePanelEvent,
   SidePanelListener,
+  SidePanelPageTarget,
   SidePanelWindowOptions,
 } from './types'
 
@@ -33,6 +34,7 @@ export type {
   SidePanelBackgroundOptions,
   SidePanelEvent,
   SidePanelListener,
+  SidePanelPageTarget,
   SidePanelWindowOptions,
 } from './types'
 
@@ -349,6 +351,72 @@ async function openState(windowId: number): Promise<boolean> {
 /* -------------------------------------------------------------------------- */
 /* Page                                                                       */
 /* -------------------------------------------------------------------------- */
+/*
+ * The global page uses the native setting. Window and tab pages are kept in
+ * storage.session and applied by the registered panel page itself (it navigates
+ * to the page for its window and active tab), because Chrome has no window
+ * setting and its tab setting also makes the open state per tab.
+ */
+
+const PAGE_KEY = '__webext_utils:side-panel:page:'
+
+function pageTarget(
+  value: unknown,
+  operation: string
+): SidePanelPageTarget | undefined {
+  if (value === undefined) return undefined
+  const target = object(value)
+  const keys = target ? Object.keys(target) : []
+  if (
+    target &&
+    keys.length === 1 &&
+    (keys[0] === 'windowId' || keys[0] === 'tabId') &&
+    validId(target[keys[0]])
+  )
+    return keys[0] === 'windowId'
+      ? { windowId: target.windowId as number }
+      : { tabId: target.tabId as number }
+  return fail(
+    'INVALID_ARGUMENT',
+    operation,
+    'Expected { windowId } or { tabId } with a nonnegative integer'
+  )
+}
+
+function pageKey(target: SidePanelPageTarget): string {
+  return target.tabId !== undefined
+    ? `${PAGE_KEY}tab:${target.tabId}`
+    : `${PAGE_KEY}window:${target.windowId}`
+}
+
+function session(operation: string, method: 'get' | 'set' | 'remove') {
+  if (!nativeMethod('storage', 'session', method))
+    fail(
+      'PERMISSION_DENIED',
+      operation,
+      'Window and tab pages require the "storage" permission'
+    )
+  return (value: unknown) =>
+    call(operation, ['storage', 'session', method], value)
+}
+
+/** Reads saved pages. Invalid values are ignored. */
+async function savedPages(
+  operation: string,
+  keys: string[]
+): Promise<Record<string, string>> {
+  const values = object(await session(operation, 'get')(keys)) ?? {}
+  const result: Record<string, string> = Object.create(null)
+  for (const key of keys) {
+    if (!Object.hasOwn(values, key)) continue
+    try {
+      result[key] = pageUrl(values[key], operation, true).href
+    } catch {
+      /* Not a page of this extension. */
+    }
+  }
+  return result
+}
 
 async function writePage(url: URL, operation: string): Promise<void> {
   if (native(operation) === 'chrome')
@@ -359,36 +427,93 @@ async function writePage(url: URL, operation: string): Promise<void> {
   else await call(operation, ['sidebarAction', 'setPanel'], { panel: url.href })
 }
 
+async function globalPage(operation: string): Promise<string> {
+  let path: unknown
+  if (native(operation) === 'chrome') {
+    const options = object(
+      await call(operation, ['sidePanel', 'getOptions'], {})
+    )
+    if (!options)
+      fail('NATIVE_ERROR', operation, 'Invalid native panel options')
+    path = options.path
+  } else path = await call(operation, ['sidebarAction', 'getPanel'], {})
+  if (path === undefined || path === '') return manifestPage(operation).href
+  return pageUrl(path, operation, true).href
+}
+
+/** The page shown in a window: active tab > window > global. */
+async function effectivePage(
+  operation: string,
+  windowId: number,
+  tabId?: number
+): Promise<string> {
+  if (tabId === undefined) {
+    const tabs = await call(operation, ['tabs', 'query'], {
+      active: true,
+      windowId,
+    })
+    const active = Array.isArray(tabs) ? object(tabs[0])?.id : undefined
+    if (validId(active)) tabId = active
+  }
+  const keys = [
+    ...(tabId === undefined ? [] : [pageKey({ tabId })]),
+    pageKey({ windowId }),
+  ]
+  const saved = await savedPages(operation, keys)
+  for (const key of keys) if (saved[key]) return saved[key]
+  return await globalPage(operation)
+}
+
 /**
- * サイドパネルに表示するページを変更します（全ウィンドウ共通）。
+ * サイドパネルに表示するページを変更します。
  *
- * 開いているパネルにも反映されます。パスは拡張機能のルートからの相対パス、
- * またはこの拡張機能の絶対 URL で指定します。クエリとハッシュは保持します。
+ * - `target` を省略: 全ウィンドウ共通のページ
+ * - `{ windowId }`: そのウィンドウだけのページ
+ * - `{ tabId }`: そのタブがアクティブなときだけのページ
+ *
+ * 優先順位は「タブ > ウィンドウ > 全体」です。開いているパネルにも反映されます。
+ * パスは拡張機能のルートからの相対パス、またはこの拡張機能の絶対 URL で指定します。
+ * クエリとハッシュは保持します。
+ *
+ * ウィンドウ・タブごとのページは、パネル側のページで {@link registerPanel} を呼んでいる場合に反映され、
+ * Manifest の `storage` 権限が必要です。
  *
  * @param path 例: `'panel.html'`, `'panel.html?view=detail'`
+ * @param target ページを設定する対象
  * @throws {WebextError} 他サイト・他の拡張機能の URL は `INVALID_ARGUMENT`
  *
  * @example
  * ```ts
- * await webextSidePanel.setPage('panel.html?view=settings')
+ * await webextSidePanel.setPage('panel.html')
+ * await webextSidePanel.setPage('panel.html?view=tab', { tabId: 42 })
  * ```
  */
-async function setPage(path: string): Promise<void> {
+async function setPage(
+  path: string,
+  target?: SidePanelPageTarget
+): Promise<void> {
   try {
-    await writePage(pageUrl(path, 'setPage'), 'setPage')
+    const scope = pageTarget(target, 'setPage')
+    const url = pageUrl(path, 'setPage')
+    if (scope) await session('setPage', 'set')({ [pageKey(scope)]: url.href })
+    else await writePage(url, 'setPage')
   } catch (cause) {
     throw convert('setPage', cause)
   }
 }
 
 /**
- * サイドパネルに表示するページを Manifest の既定値に戻します。
+ * {@link setPage} の設定を取り消します。
  *
- * Chrome は `side_panel.default_path`、Firefox は `sidebar_action.default_panel` を使います。
+ * - `target` を省略: 全体のページを Manifest の既定値に戻す
+ *   （Chrome は `side_panel.default_path`、Firefox は `sidebar_action.default_panel`）
+ * - `{ windowId }` / `{ tabId }`: その対象のページ設定を削除し、上位の設定に従う
  */
-async function resetPage(): Promise<void> {
+async function resetPage(target?: SidePanelPageTarget): Promise<void> {
   try {
-    if (native('resetPage') === 'firefox')
+    const scope = pageTarget(target, 'resetPage')
+    if (scope) await session('resetPage', 'remove')(pageKey(scope))
+    else if (native('resetPage') === 'firefox')
       await call('resetPage', ['sidebarAction', 'setPanel'], { panel: null })
     else await writePage(manifestPage('resetPage'), 'resetPage')
   } catch (cause) {
@@ -399,27 +524,31 @@ async function resetPage(): Promise<void> {
 /**
  * サイドパネルに表示するページの絶対 URL を返します。
  *
+ * - `target` を省略: 全体のページ
+ * - `{ windowId }`: そのウィンドウのページ（ウィンドウ > 全体）
+ * - `{ tabId }`: そのタブがアクティブなときのページ（タブ > タブのウィンドウ > 全体）
+ *
  * パネルが開いているかどうかは表しません（{@link isOpen} を使ってください）。
  *
  * @example
  * ```ts
- * const page = await webextSidePanel.getPage()
- * // 'chrome-extension://<id>/panel.html'
+ * const page = await webextSidePanel.getPage({ tabId: 42 })
+ * // 'chrome-extension://<id>/panel.html?view=tab'
  * ```
  */
-async function getPage(): Promise<string> {
+async function getPage(target?: SidePanelPageTarget): Promise<string> {
   try {
-    let path: unknown
-    if (native('getPage') === 'chrome') {
-      const options = object(
-        await call('getPage', ['sidePanel', 'getOptions'], {})
+    const scope = pageTarget(target, 'getPage')
+    if (!scope) return await globalPage('getPage')
+    if (scope.windowId !== undefined)
+      return (
+        (await savedPages('getPage', [pageKey(scope)]))[pageKey(scope)] ??
+        (await globalPage('getPage'))
       )
-      if (!options)
-        fail('NATIVE_ERROR', 'getPage', 'Invalid native panel options')
-      path = options.path
-    } else path = await call('getPage', ['sidebarAction', 'getPanel'], {})
-    if (path === undefined || path === '') return manifestPage('getPage').href
-    return pageUrl(path, 'getPage', true).href
+    const tab = object(await call('getPage', ['tabs', 'get'], scope.tabId))
+    if (!validId(tab?.windowId))
+      fail('TAB_NOT_FOUND', 'getPage', 'The tab has no window')
+    return await effectivePage('getPage', tab.windowId, scope.tabId)
   } catch (cause) {
     throw convert('getPage', cause)
   }
@@ -566,6 +695,8 @@ function onClosed(listener: SidePanelListener): Unsubscribe {
 const PORT = `${PROTOCOL}/panel`
 /** Minimum lifetime (ms) of a Port before the panel reconnects it. */
 const RECONNECT_AFTER = 1000
+/** Time (ms) a navigating panel has to reconnect before it counts as closed. */
+const TRANSFER_TIMEOUT = 5000
 
 let registration: Subscription | undefined
 /** The window of the panel registered in this page, once known. */
@@ -579,6 +710,10 @@ let registeredWindow: number | undefined
  *
  * - {@link onOpened} / {@link onClosed} の通知（Background の {@link startBackground} も必要）
  * - {@link isOpen} / {@link toggle} による開閉状態の判定
+ * - ウィンドウ・タブごとのページ（{@link setPage}）への切り替え
+ *
+ * パネルに表示するすべてのページで呼び出してください。ページを切り替えると、
+ * 切り替え先のページで改めて登録されます（このときは開閉の通知は発生しません）。
  *
  * @returns 登録の解除関数。`ready` はウィンドウを特定して登録が完了すると解決します。
  * @throws {WebextError} 拡張機能のページ以外では `CONTEXT_UNAVAILABLE`、二重登録は `INVALID_ARGUMENT`
@@ -623,6 +758,10 @@ function registerPanel(): Subscription {
     let windowId: number | undefined
     let active = true
     let port: Port | undefined
+    let routing = 0
+    const location = property(globalThis, 'location') as {
+      replace?(url: string): void
+    }
 
     const send = (type: 'present') => {
       void call(operation, ['runtime', 'sendMessage'], {
@@ -686,6 +825,36 @@ function registerPanel(): Subscription {
       )
         respond(true)
     }
+    // Shows the page set for this window and its active tab (setPage).
+    // Returns true when this document navigates away.
+    const route = async (tabId?: number): Promise<boolean> => {
+      if (windowId === undefined || !active) return false
+      const attempt = ++routing
+      let target: string
+      try {
+        target = await effectivePage(operation, windowId, tabId)
+      } catch {
+        return false
+      }
+      if (attempt !== routing || !active || target === page) return false
+      // Firefox: tell the Background that the panel stays open across the
+      // navigation, so no closed/opened events are published for it.
+      try {
+        port?.postMessage({ protocol: PROTOCOL, version: 1, type: 'navigate' })
+      } catch {
+        /* The Background is not connected. */
+      }
+      location.replace?.(target)
+      return true
+    }
+    const listeners: (() => void)[] = []
+    const watch = (path: string[], listener: (...args: never[]) => void) => {
+      const add = nativeMethod(...path, 'addListener')
+      const remove = nativeMethod(...path, 'removeListener')
+      if (!add || !remove) return
+      add(listener)
+      listeners.push(() => remove(listener))
+    }
     const stop = () => {
       if (!active) return
       active = false
@@ -693,6 +862,7 @@ function registerPanel(): Subscription {
       registeredWindow = undefined
       window.removeEventListener('pagehide', stop)
       removeListener(onMessage)
+      for (const remove of listeners.splice(0)) remove()
       const current = port
       port = undefined
       current?.disconnect()
@@ -707,7 +877,24 @@ function registerPanel(): Subscription {
         fail('TRANSPORT_CLOSED', operation, 'Registration was removed')
       windowId = current.id
       registeredWindow = current.id
+      watch(['tabs', 'onActivated'], (info: unknown) => {
+        const data = object(info)
+        if (data && data.windowId === windowId && validId(data.tabId))
+          void route(data.tabId)
+      })
+      watch(['storage', 'onChanged'], (changes: unknown, area: unknown) => {
+        if (
+          area === 'session' &&
+          Object.keys(object(changes) ?? {}).some((key) =>
+            key.startsWith(PAGE_KEY)
+          )
+        )
+          void route()
+      })
+      // Navigate before announcing, so the first page is not reported.
+      if (await route()) return
       if (kind === 'firefox') connect('opened')
+      else send('present')
     })()
     ready.catch(stop)
     registration = Object.assign(stop, { ready })
@@ -828,7 +1015,7 @@ function startBackground(
             return
           }
           windows.add(windowId)
-          void getPage()
+          void effectivePage('event', windowId)
             .catch(() => pageUrl(data.path, 'event', true).href)
             .then((page) => {
               if (!windows.has(windowId) || pages.has(windowId)) return
@@ -848,9 +1035,14 @@ function startBackground(
           ['runtime', 'onMessage'],
           (data: unknown, sender: unknown, respond: unknown) => {
             if (!trusted(sender)) return
-            // Registered panels report their window after a worker restart.
+            // Registered panels report their window after a worker restart,
+            // and their page after switching to a window or tab page.
             const received = message(data, ['present'])
-            if (received) windows.add(received.event.windowId)
+            if (received) {
+              const { windowId, page } = received.event
+              windows.add(windowId)
+              if (pages.has(windowId)) pages.set(windowId, page)
+            }
             // isOpen() from other pages: only a known open window is answered,
             // so a registered panel can still answer when this state is stale.
             const query = object(data)
@@ -872,6 +1064,11 @@ function startBackground(
           /* No panel is open. */
         })
       } else {
+        const transfers = new Map<number, ReturnType<typeof setTimeout>>()
+        stops.push(() => {
+          for (const timer of transfers.values()) clearTimeout(timer)
+          transfers.clear()
+        })
         listen(['runtime', 'onConnect'], (value: unknown) => {
           const port = value as Port & { sender?: unknown }
           if (object(port)?.name !== PORT) return
@@ -880,17 +1077,63 @@ function startBackground(
             return
           }
           let event: SidePanelEvent | undefined
+          let navigating = false
           port.onMessage.addListener((data) => {
+            if (
+              object(data)?.protocol === PROTOCOL &&
+              object(data)?.type === 'navigate'
+            ) {
+              navigating = true
+              return
+            }
             const received = message(data, ['opened', 'present'])
             if (!received || event) return
             event = received.event
+            // The page that this panel navigated to: no new opened event.
+            const transfer = transfers.get(event.windowId)
+            if (transfer) {
+              clearTimeout(transfer)
+              transfers.delete(event.windowId)
+              return
+            }
             if (received.type === 'opened') current.publish('opened', event)
           })
           port.onDisconnect.addListener(() => {
             nativeValue('runtime', 'lastError')
-            if (event && hub === current) current.publish('closed', event)
+            const closed = event
             event = undefined
+            if (!closed || hub !== current) return
+            if (!navigating) {
+              current.publish('closed', closed)
+              return
+            }
+            // Wait for the next page of the same panel to connect.
+            clearTimeout(transfers.get(closed.windowId))
+            transfers.set(
+              closed.windowId,
+              setTimeout(() => {
+                transfers.delete(closed.windowId)
+                if (hub === current) current.publish('closed', closed)
+              }, TRANSFER_TIMEOUT)
+            )
           })
+        })
+      }
+      // Window and tab pages are removed with their window or tab.
+      if (nativeMethod('storage', 'session', 'remove')) {
+        const forget = (target: SidePanelPageTarget) =>
+          void call(
+            operation,
+            ['storage', 'session', 'remove'],
+            pageKey(target)
+          ).catch(() => {
+            /* Removed with the browser session. */
+          })
+        listen(['tabs', 'onRemoved'], (tabId: unknown) => {
+          if (validId(tabId)) forget({ tabId })
+        })
+        listen(['windows', 'onRemoved'], (windowId: unknown) => {
+          if (validId(windowId)) forget({ windowId })
         })
       }
       if (value.openOnActionClick === true) {

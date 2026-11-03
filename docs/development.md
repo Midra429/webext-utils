@@ -103,7 +103,7 @@ bun run test:side-panel --firefox
 | `test:integration` | 5機能の連携、別ページからの変更の監視、後片付け |
 | `test:browser --review` | タブ移動後の宛先、大容量の移行 |
 | `test:popout` | 同じ HTML の再利用、関連タブ、再読み込み、復旧 |
-| `test:side-panel` | 開閉・切り替え・状態・ページ設定・開閉通知を**両ブラウザで同じ手順**で検査 |
+| `test:side-panel` | 開閉・切り替え・状態・ページ設定（全体・ウィンドウ・タブ）・開閉通知を**両ブラウザで同じ手順**で検査 |
 
 `test:side-panel` は、クリックごとに1手順を実行します。Firefox で自動操作が拒否される場合は `--manual` を付け、表示されたボタンを手でクリックしてください。
 結果を保存する場合は `BROWSER_REPORT` / `POPOUT_REPORT` / `SIDE_PANEL_REPORT` / `PACKAGE_REPORT` / `RUNTIME_REPORT` に出力先を指定します。
@@ -119,12 +119,12 @@ Linux で root として Chromium を動かす場合は `CHROME_FLAGS='--no-sand
 | `check` / `typecheck` / `test:types` | 合格 |
 | `test`（単体テスト） | 合格 |
 | `test:package` / `build:example` / `test:runtime` | 合格 |
-| Chrome for Testing 153.0.8010.12（Linux, headless） | `test:browser` 28/28、`test:integration` 3/3、`test:browser --review` 2/2、`test:popout` 13/13、`test:side-panel` 10/10 |
+| Chrome for Testing 153.0.8010.12（Linux, headless） | `test:browser` 28/28、`test:integration` 3/3、`test:browser --review` 2/2、`test:popout` 13/13、`test:side-panel` 13/13 |
 | Firefox | **未実施**。リリース前に `test:browser` / `test:integration` / `test:popout` / `test:side-panel` を Firefox で実行してください |
 
 ## 未検証・保証しない範囲
 
-- Firefox での実機試験（上表）。特に、サイドパネルの開閉通知（パネルと Background の間の `runtime.Port`）と、イベントページが停止したときの再接続。
+- Firefox での実機試験（上表）。特に、サイドパネルの開閉通知（パネルと Background の間の `runtime.Port`）、イベントページが停止したときの再接続、ウィンドウ・タブごとのページへの遷移で通知が出ないこと。
 - Background の `action.onClicked`（`openOnActionClick`）からの開閉。単体テストでは、ネイティブ呼び出しがクリックの処理内で同期的に始まることを検証しています。
 - Windows / macOS、全中間バージョン、プライベートウィンドウでの動作。
 - Content Script の実際の BFCache、作成途中の popout の強制停止。

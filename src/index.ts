@@ -59,6 +59,7 @@ export type {
   SidePanelBackgroundOptions,
   SidePanelEvent,
   SidePanelListener,
+  SidePanelPageTarget,
   SidePanelWindowOptions,
 } from './side-panel'
 export type {

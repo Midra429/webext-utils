@@ -90,6 +90,11 @@ function fixture(kind: Kind, options: { focused?: number } = {}) {
       if (message.type === 'query')
         return message.windowId !== undefined && open.has(message.windowId)
       if (message.type === 'probe') return
+      // A panel reports its page to the Background (another context).
+      if (message.type === 'present') {
+        onMessage.emit(message, { id: 'self', url: `${root}panel.html` })
+        return
+      }
       sent.push(message)
     },
     onMessage: onMessage.api,
@@ -105,13 +110,59 @@ function fixture(kind: Kind, options: { focused?: number } = {}) {
       )
     },
   }
+  // Tabs in the focused window; tab 1 is active.
+  const tabs = new Map<
+    number,
+    { id: number; windowId: number; active: boolean }
+  >([
+    [1, { id: 1, windowId: focused, active: true }],
+    [2, { id: 2, windowId: focused, active: false }],
+    [3, { id: 3, windowId: 5, active: true }],
+  ])
+  const onActivated = event()
+  const onTabRemoved = event()
+  const onWindowRemoved = event()
+  const tabsApi = {
+    query: async ({ windowId }: { windowId: number }) =>
+      [...tabs.values()].filter((t) => t.active && t.windowId === windowId),
+    get: async (id: number) => {
+      const tab = tabs.get(id)
+      if (!tab) throw new Error(`No tab with id: ${id}.`)
+      return tab
+    },
+    onActivated: onActivated.api,
+    onRemoved: onTabRemoved.api,
+  }
+  const sessionData: Record<string, unknown> = {}
+  const onStorageChanged = event()
+  const sessionApi = {
+    get: async (keys: string[]) =>
+      Object.fromEntries(
+        keys.filter((k) => k in sessionData).map((k) => [k, sessionData[k]])
+      ),
+    set: async (items: Record<string, unknown>) => {
+      const changes: Record<string, unknown> = {}
+      for (const [k, v] of Object.entries(items)) {
+        changes[k] = { oldValue: sessionData[k], newValue: v }
+        sessionData[k] = v
+      }
+      onStorageChanged.emit(changes, 'session')
+    },
+    remove: async (key: string) => {
+      if (!(key in sessionData)) return
+      const oldValue = sessionData[key]
+      delete sessionData[key]
+      onStorageChanged.emit({ [key]: { oldValue } }, 'session')
+    },
+  }
+  const replaced: string[] = []
   const windows = {
     getLastFocused: async () => {
       calls.push('getLastFocused')
       return { id: focused }
     },
     getCurrent: async () => ({ id: focused }),
-    onRemoved: event().api,
+    onRemoved: onWindowRemoved.api,
   }
   const chromePanel = {
     open: async ({ windowId }: { windowId: number }) => {
@@ -157,6 +208,8 @@ function fixture(kind: Kind, options: { focused?: number } = {}) {
   const api = {
     runtime,
     windows,
+    tabs: tabsApi,
+    storage: { session: sessionApi, onChanged: onStorageChanged.api },
     action: { onClicked: onClicked.api },
     extension: { getBackgroundPage: () => undefined as unknown },
     ...(kind === 'chrome'
@@ -175,9 +228,23 @@ function fixture(kind: Kind, options: { focused?: number } = {}) {
     onMessage,
     onClicked,
     ports,
+    sessionData,
+    replaced,
+    onTabRemoved,
+    onWindowRemoved,
+    /** Makes a tab active in its window. */
+    activate(tabId: number) {
+      const tab = tabs.get(tabId)!
+      for (const other of tabs.values())
+        if (other.windowId === tab.windowId) other.active = other === tab
+      onActivated.emit({ tabId, windowId: tab.windowId })
+    },
     /** Turns this realm into the extension page at `path`. */
     page(path: string) {
-      global('location', { href: root + path })
+      global('location', {
+        href: root + path,
+        replace: (url: string) => replaced.push(url),
+      })
       global('document', {})
       global('window', window)
     },
@@ -225,6 +292,109 @@ describe.each(kinds)('%s', (kind) => {
     expect(await panel.getPage()).toBe(`${f.root}other.html`)
     await panel.resetPage()
     expect(await panel.getPage()).toBe(`${f.root}panel.html`)
+  })
+
+  test('window and tab pages take precedence over the global page', async () => {
+    const f = fixture(kind)
+    const page = (path: string) => `${f.root}${path}`
+    await panel.setPage('global.html')
+    await panel.setPage('window.html', { windowId: 9 })
+    await panel.setPage('tab.html#a', { tabId: 2 })
+    expect(await panel.getPage()).toBe(page('global.html'))
+    expect(await panel.getPage({ windowId: 9 })).toBe(page('window.html'))
+    expect(await panel.getPage({ windowId: 5 })).toBe(page('global.html'))
+    expect(await panel.getPage({ tabId: 2 })).toBe(page('tab.html#a'))
+    expect(await panel.getPage({ tabId: 1 })).toBe(page('window.html'))
+    expect(await panel.getPage({ tabId: 3 })).toBe(page('global.html'))
+    await panel.resetPage({ windowId: 9 })
+    expect(await panel.getPage({ tabId: 1 })).toBe(page('global.html'))
+    await panel.resetPage({ tabId: 2 })
+    expect(await panel.getPage({ tabId: 2 })).toBe(page('global.html'))
+    expect(Object.keys(f.sessionData)).toEqual([])
+    for (const target of [{ tabId: 1, windowId: 9 }, { tabId: -1 }, {}])
+      await expect(
+        panel.setPage('x.html', target as { tabId: number })
+      ).rejects.toMatchObject({ code: 'INVALID_ARGUMENT' })
+    await expect(panel.getPage({ tabId: 99 })).rejects.toMatchObject({
+      code: 'TAB_NOT_FOUND',
+    })
+  })
+
+  test('the panel page switches to the page of its window and active tab', async () => {
+    const f = fixture(kind)
+    await panel.setPage('window.html', { windowId: 9 })
+    f.page('panel.html')
+    // The global page loads first and moves to the window page.
+    let registration = panel.registerPanel()
+    await registration.ready
+    expect(f.replaced).toEqual([`${f.root}window.html`])
+    registration()
+    // On the window page, a tab page for the active tab applies at once.
+    f.page('window.html')
+    registration = panel.registerPanel()
+    await registration.ready
+    expect(f.replaced).toHaveLength(1)
+    await panel.setPage('tab.html', { tabId: 1 })
+    await tick()
+    expect(f.replaced.at(-1)).toBe(`${f.root}tab.html`)
+    registration()
+    // On the tab page, activating another tab returns to the window page.
+    f.page('tab.html')
+    registration = panel.registerPanel()
+    await registration.ready
+    f.activate(2)
+    await tick()
+    expect(f.replaced.at(-1)).toBe(`${f.root}window.html`)
+    expect(f.replaced).toHaveLength(3)
+    registration()
+  })
+
+  test('switching pages publishes no extra events', async () => {
+    const f = fixture(kind)
+    f.background()
+    const stopBackground = panel.startBackground()
+    const events: string[] = []
+    const stops = [
+      panel.onOpened((e) => events.push(`opened:${e.page}`)),
+      panel.onClosed((e) => events.push(`closed:${e.page}`)),
+    ]
+    await panel.open({ windowId: 9 })
+    f.page('panel.html')
+    const first = panel.registerPanel()
+    await first.ready
+    await tick()
+    // A tab page for the active tab: the panel navigates to it.
+    await panel.setPage('tab.html', { tabId: 1 })
+    await tick()
+    expect(f.replaced).toEqual([`${f.root}tab.html`])
+    f.window.dispatchEvent(new Event('pagehide'))
+    f.page('tab.html')
+    const second = panel.registerPanel()
+    await second.ready
+    await tick()
+    // The user closes the panel.
+    await panel.close({ windowId: 9 })
+    f.window.dispatchEvent(new Event('pagehide'))
+    await tick()
+    expect(events).toEqual([
+      `opened:${f.root}panel.html`,
+      `closed:${f.root}tab.html`,
+    ])
+    for (const stop of stops) stop()
+    stopBackground()
+  })
+
+  test('the Background removes pages of closed tabs and windows', async () => {
+    const f = fixture(kind)
+    f.background()
+    const stop = panel.startBackground()
+    await panel.setPage('tab.html', { tabId: 2 })
+    await panel.setPage('window.html', { windowId: 9 })
+    f.onTabRemoved.emit(2)
+    f.onWindowRemoved.emit(9)
+    await tick()
+    expect(Object.keys(f.sessionData)).toEqual([])
+    stop()
   })
 
   test('foreign pages and invalid options are rejected before side effects', async () => {

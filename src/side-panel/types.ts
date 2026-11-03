@@ -17,6 +17,19 @@ export interface SidePanelWindowOptions {
   windowId?: number
 }
 
+/**
+ * ページ設定の対象です。省略すると全ウィンドウ共通の設定です。
+ *
+ * - `{ windowId }`: そのウィンドウのパネル
+ * - `{ tabId }`: そのタブがアクティブなときのパネル
+ *
+ * 優先順位は「タブ > ウィンドウ > 全体」です。開閉状態はウィンドウ単位のままで、
+ * パネルの内容がアクティブなタブ・ウィンドウに応じて切り替わります。
+ */
+export type SidePanelPageTarget =
+  | { windowId: number; tabId?: never }
+  | { tabId: number; windowId?: never }
+
 /** サイドパネルが開いた・閉じたときに通知される情報です。 */
 export interface SidePanelEvent {
   /** パネルが開いた（閉じた）ウィンドウの ID です。 */

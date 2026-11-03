@@ -120,16 +120,47 @@ const other = await webextSidePanel.isOpen({ windowId: 3 })
 
 ## ページを変更する
 
+表示するページは、全体・ウィンドウごと・タブごとに設定できます。
+
 ```ts
+// 全ウィンドウ共通
 await webextSidePanel.setPage('panel.html?view=settings')
-await webextSidePanel.getPage() // 'chrome-extension://<id>/panel.html?view=settings'
-await webextSidePanel.resetPage() // Manifest の既定値に戻す
+
+// ウィンドウ 3 だけ
+await webextSidePanel.setPage('panel.html?view=window', { windowId: 3 })
+
+// タブ 42 がアクティブなときだけ
+await webextSidePanel.setPage('panel.html?view=tab', { tabId: 42 })
+
+await webextSidePanel.getPage({ tabId: 42 }) // 'chrome-extension://<id>/panel.html?view=tab'
+await webextSidePanel.resetPage({ tabId: 42 }) // タブの設定を削除
+await webextSidePanel.resetPage() // 全体の設定を Manifest の既定値に戻す
 ```
 
+| `target` | 意味 | `getPage(target)` の結果 |
+| --- | --- | --- |
+| 省略 | 全ウィンドウ共通 | 全体の設定 |
+| `{ windowId }` | そのウィンドウのパネル | ウィンドウ > 全体 |
+| `{ tabId }` | そのタブがアクティブなときのパネル | タブ > タブのウィンドウ > 全体 |
+
+- 優先順位は「タブ > ウィンドウ > 全体」です。
+- 開閉状態はどの設定でもウィンドウ単位です。タブを切り替えると、パネルは開いたまま、内容がそのタブのページに切り替わります。
 - 相対パスは拡張機能のルートを基準に解決します。クエリとハッシュは保持します。
 - この拡張機能以外の URL（Web ページ・他の拡張機能）は `INVALID_ARGUMENT` です。
-- 設定は全ウィンドウ共通です。開いているパネルにも反映されます。
+- 開いているパネルにも反映されます。
 - `getPage()` は設定値を返します。パネルが開いているかどうかは `isOpen()` で確認してください。
+
+### ウィンドウ・タブごとのページの仕組みと条件
+
+ブラウザには全体のページだけを設定し、ウィンドウ・タブごとのページへの切り替えは、パネルのページ（`registerPanel()`）がライブラリの記録を見て行います。
+Chrome にはウィンドウごとの設定がなく、タブごとの設定では開閉状態までタブ単位になり Firefox と動作が異なるためです。
+
+- **パネルに表示するすべてのページで `registerPanel()` を呼んでください。** 切り替え先のページで呼ばれていないと、以降の切り替えが止まります。
+- Manifest に `storage` 権限が必要です（設定は `storage.session` に保存します）。
+- 切り替えはページの遷移です。パネル内の状態（入力中の値など）は引き継がれません。必要なら storage や messaging で共有してください。
+- パネルを開いた直後は、全体のページが読み込まれてから該当するページへ遷移します。
+- 切り替えでは `onOpened` / `onClosed` は通知されません。`onClosed` の `page` は閉じた時点のページです。
+- 閉じたタブ・ウィンドウの設定は、Background の `startBackground()` が削除します（登録がない場合も、ブラウザを閉じると消えます）。
 
 ## 開閉の通知を受け取る
 
@@ -175,10 +206,10 @@ stopClosed()
 
 ## 提供しない機能
 
-次の機能は、ブラウザによって動作が異なり揃えられないため提供していません。
+次の機能は、ブラウザの制約で両ブラウザの動作を揃えられないため提供していません。
 
-- **タブごとのパネル**: Chrome はタブごとに開閉状態を持ち、Firefox はウィンドウごとに開閉状態を持つためです。タブに応じて表示を変える場合は、パネルのページ内で現在のタブを見て切り替えてください。
-- **ウィンドウごとのページ設定**: Chrome にはありません。
+- **タブごとの開閉状態**（Chrome の「タブ専用パネル」）: Firefox で再現するには、タブを切り替えた瞬間に開閉する必要があります。Firefox の開閉はユーザー操作の処理内でしか呼べず、タブの切り替えはユーザー操作として扱われないため実現できません。
+- **アクティブでないウィンドウを指定した開閉**: Firefox の開閉はアクティブなウィンドウだけが対象です。先にウィンドウへフォーカスを移すと、その待ち時間でユーザー操作の扱いが失われます。
 - **ユーザー操作を伴わない開閉**: どちらのブラウザも許可していません。
 
 参考: [Chrome sidePanel](https://developer.chrome.com/docs/extensions/reference/api/sidePanel) / [Firefox sidebarAction](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/sidebarAction)

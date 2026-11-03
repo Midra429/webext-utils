@@ -1,6 +1,7 @@
 import type {
   SidePanelEvent,
   SidePanelListener,
+  SidePanelPageTarget,
   Subscription,
   Unsubscribe,
 } from '@midra/webext-utils/side-panel'
@@ -46,8 +47,16 @@ stopBackground()
 void webextSidePanel.open({ tabId: 1 })
 // @ts-expect-error numeric IDs
 void webextSidePanel.open({ windowId: '1' })
-// @ts-expect-error per-tab pages are not supported
 void webextSidePanel.setPage('panel.html', { tabId: 1 })
+void webextSidePanel.setPage('panel.html', { windowId: 2 })
+const target: SidePanelPageTarget = { tabId: 1 }
+const tabPage: Promise<string> = webextSidePanel.getPage(target)
+void tabPage
+void webextSidePanel.resetPage({ windowId: 2 })
+// @ts-expect-error page targets are exclusive
+void webextSidePanel.setPage('panel.html', { tabId: 1, windowId: 2 })
+// @ts-expect-error an empty target is not a page target
+void webextSidePanel.getPage({})
 // @ts-expect-error URL strings only
 void webextSidePanel.setPage(null)
 // @ts-expect-error listener receives event objects
