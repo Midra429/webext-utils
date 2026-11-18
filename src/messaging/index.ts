@@ -76,7 +76,8 @@ function create<Override = {}>(
   let disposed = false
   const bridges = new Set<IsolatedBridge>()
   function active(): void {
-    if (disposed) throw fail('TRANSPORT_CLOSED', 'Messaging client disposed')
+    if (disposed)
+      throw fail('TRANSPORT_CLOSED', 'messaging クライアントは破棄されています')
   }
   // The public generic contract is erased only at this runtime boundary. All
   // wire values remain unknown and are validated before crossing native APIs.
@@ -125,7 +126,9 @@ function create<Override = {}>(
       for (const bridge of bridges) bridge.dispose()
       bridges.clear()
       for (const cancel of cancellations)
-        cancel(fail('TRANSPORT_CLOSED', 'Messaging client disposed'))
+        cancel(
+          fail('TRANSPORT_CLOSED', 'messaging クライアントが破棄されました')
+        )
       cancellations.clear()
       current().dispose(owner)
     },

@@ -15,9 +15,12 @@ export function registerService(
 ): Unsubscribe {
   const host = serviceHosts.get(bridge)
   if (!host)
-    throw fail('ACCESS_DENIED', 'An active ISOLATED bridge is required')
+    throw fail('ACCESS_DENIED', '有効な ISOLATED world のブリッジが必要です')
   if (host.has(name))
-    throw fail('INVALID_ARGUMENT', 'Page service already registered')
+    throw fail(
+      'INVALID_ARGUMENT',
+      'このサービスはすでにページに公開されています'
+    )
   host.set(name, service)
   return () => {
     if (host.get(name) === service) {

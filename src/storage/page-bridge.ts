@@ -57,7 +57,10 @@ class Hub {
       (r) => r.area === area && r[operation].has(key)
     )
     if (!rule)
-      throw fail('ACCESS_DENIED', 'Storage key or operation is not exposed')
+      throw fail(
+        'ACCESS_DENIED',
+        'このストレージキーまたは操作は公開されていません'
+      )
     return rule
   }
   check(rule: Rule, key: string, value: unknown): void {
@@ -67,7 +70,10 @@ class Hub {
     } catch {
       /* Fail closed. */
     }
-    throw fail('VALIDATION_ERROR', 'Exposed storage value failed validation')
+    throw fail(
+      'VALIDATION_ERROR',
+      '公開しているストレージの値が検証に通りませんでした'
+    )
   }
   async request(
     value: unknown,
@@ -79,7 +85,7 @@ class Hub {
         Object.keys(v).some((k) => !['operation', 'id'].includes(k)) ||
         typeof v.id !== 'string'
       )
-        throw fail('INVALID_ARGUMENT', 'Invalid storage unsubscribe')
+        throw fail('INVALID_ARGUMENT', 'ストレージの購読解除の要求が不正です')
       this.subscriptions.get(v.id)?.stop()
       this.subscriptions.delete(v.id)
       return
@@ -94,11 +100,11 @@ class Hub {
         v.id.length > 128 ||
         !v.id)
     )
-      throw fail('INVALID_ARGUMENT', 'Invalid page storage subscription')
+      throw fail('INVALID_ARGUMENT', 'ページからのストレージ購読が不正です')
     let expanded = v?.keys
     if (watching && v.keys === undefined) {
       if (typeof v.prefix !== 'string')
-        throw fail('INVALID_ARGUMENT', 'Invalid watch namespace')
+        throw fail('INVALID_ARGUMENT', 'watch の namespace が不正です')
       if (v.prefix) segments(v.prefix)
       expanded = [
         ...new Set(
@@ -128,12 +134,15 @@ class Hub {
       )
     if (watching) {
       if (!rules.length)
-        throw fail('ACCESS_DENIED', 'No storage keys are exposed for watch')
+        throw fail(
+          'ACCESS_DENIED',
+          'watch 用に公開しているストレージキーがありません'
+        )
       if (
         this.subscriptions.size >= 256 &&
         !this.subscriptions.has(v.id as string)
       )
-        throw fail('QUOTA_EXCEEDED', 'Too many page storage subscriptions')
+        throw fail('QUOTA_EXCEEDED', 'ページからのストレージ購読が多すぎます')
       const id = v.id as string
       this.subscriptions.get(id)?.stop()
       const runtime = rules[0]?.runtime
@@ -162,7 +171,7 @@ class Hub {
           },
         }
       )
-      if (!stop) throw fail('ACCESS_DENIED', 'No storage watch runtime')
+      if (!stop) throw fail('ACCESS_DENIED', 'ストレージの watch を使えません')
       this.subscriptions.set(id, {
         stop,
         keys: request.keys,
@@ -206,9 +215,12 @@ export function expose<S>(
   policy: PageStoragePolicy<S>
 ): Unsubscribe {
   if (!serviceHosts.has(bridge))
-    throw fail('ACCESS_DENIED', 'An active ISOLATED bridge is required')
+    throw fail('ACCESS_DENIED', '有効な ISOLATED world のブリッジが必要です')
   if (runtime.mode() !== 'rpc')
-    throw fail('CONTEXT_UNAVAILABLE', 'Storage exposure requires ISOLATED')
+    throw fail(
+      'CONTEXT_UNAVAILABLE',
+      'ストレージの公開は ISOLATED world で行ってください'
+    )
   const expand = (names: readonly string[] = []) =>
     new Set(names.map((k) => join(prefix, k)))
   const rule: Rule = {
@@ -222,20 +234,20 @@ export function expose<S>(
   for (const [k, fn] of Object.entries(policy.validate)) {
     const full = join(prefix, k)
     if (typeof fn !== 'function')
-      throw fail('INVALID_ARGUMENT', 'Invalid page storage validator')
+      throw fail('INVALID_ARGUMENT', 'validator には関数を指定してください')
     rule.validate[full] = fn as (value: unknown) => boolean
   }
   for (const k of new Set([...rule.read, ...rule.write, ...rule.watch]))
     if (!Object.hasOwn(rule.validate, k))
       throw fail(
         'INVALID_ARGUMENT',
-        'Every exposed storage key needs a validator'
+        '公開するストレージキーにはすべて validator が必要です'
       )
   for (const k of rule.watch)
     if (!rule.read.has(k))
       throw fail(
         'INVALID_ARGUMENT',
-        'Page storage watch also requires read permission'
+        'watch を許可するキーは read も許可してください'
       )
   let hub = hubs.get(bridge)
   if (!hub) {
@@ -249,7 +261,7 @@ export function expose<S>(
         (k) => other.read.has(k) || other.write.has(k) || other.watch.has(k)
       )
     )
-      throw fail('INVALID_ARGUMENT', 'Overlapping page storage exposure')
+      throw fail('INVALID_ARGUMENT', 'ページへのストレージ公開が重複しています')
   hub.rules.add(rule)
   const host = hub
   return () => {
@@ -372,7 +384,7 @@ export class PageStorage {
       !Array.isArray(selected) ||
       !selected.every((k) => typeof k === 'string' && within(k, o.prefix))
     )
-      throw fail('VALIDATION_ERROR', 'Invalid page watch response')
+      throw fail('VALIDATION_ERROR', 'ページの watch の応答が不正です')
     if (!this.observers.has(o)) return
     const snapshot: Record<string, unknown> = Object.assign(
       Object.create(null),

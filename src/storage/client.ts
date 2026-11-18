@@ -26,7 +26,7 @@ export function createStorage<S>(
 ): StorageClient<S> {
   const area = options.area ?? 'local'
   if (!['local', 'sync', 'session'].includes(area))
-    throw fail('INVALID_ARGUMENT', 'Invalid storage area')
+    throw fail('INVALID_ARGUMENT', 'ストレージ領域が不正です')
   const validators = { ...options.validate } as Record<
     string,
     (value: unknown) => boolean
@@ -34,7 +34,7 @@ export function createStorage<S>(
   for (const [k, fn] of Object.entries(validators)) {
     key(k)
     if (typeof fn !== 'function')
-      throw fail('INVALID_ARGUMENT', 'Invalid storage validator')
+      throw fail('INVALID_ARGUMENT', 'validator には関数を指定してください')
   }
   const bridge = options.bridge
     ? new PageStorage(options.bridge.channel)
@@ -47,9 +47,13 @@ export function createStorage<S>(
     try {
       valid = validators[k]!(input) === true
     } catch (cause) {
-      throw fail('VALIDATION_ERROR', `Storage validator failed: ${k}`, cause)
+      throw fail(
+        'VALIDATION_ERROR',
+        `validator で例外が発生しました: ${k}`,
+        cause
+      )
     }
-    if (!valid) throw fail('VALIDATION_ERROR', `Storage value is invalid: ${k}`)
+    if (!valid) throw fail('VALIDATION_ERROR', `ストレージの値が不正です: ${k}`)
     return input
   }
   function store(prefix: string): StorageClient<S> {
@@ -67,10 +71,10 @@ export function createStorage<S>(
       names: readonly string[]
     ): Promise<Record<string, unknown>> {
       if (!Array.isArray(names))
-        throw fail('INVALID_ARGUMENT', 'Expected storage keys')
+        throw fail('INVALID_ARGUMENT', 'ストレージキーの配列を指定してください')
       const expanded = names.map(full)
       const saved = object(await execute('get', expanded))
-      if (!saved) throw fail('VALIDATION_ERROR', 'Invalid storage response')
+      if (!saved) throw fail('VALIDATION_ERROR', 'ストレージの応答が不正です')
       return Object.fromEntries(
         names.map((k, i) => {
           const name = expanded[i]!
@@ -84,12 +88,15 @@ export function createStorage<S>(
     async function setMany(values: Record<string, unknown>): Promise<void> {
       assertJson(values, 'storage.setMany')
       if (!object(values) || Array.isArray(values))
-        throw fail('INVALID_ARGUMENT', 'Expected storage values')
+        throw fail(
+          'INVALID_ARGUMENT',
+          'ストレージの値にはオブジェクトを指定してください'
+        )
       const expanded = Object.fromEntries(
         Object.entries(values).map(([k, v]) => {
           const name = full(k)
           if (v === undefined)
-            throw fail('SERIALIZATION_ERROR', 'Cannot store undefined')
+            throw fail('SERIALIZATION_ERROR', 'undefined は保存できません')
           const parsed = parse(name, v)
           return [name, parsed]
         })
@@ -106,7 +113,7 @@ export function createStorage<S>(
       options?: StorageWatchOptions
     ): StorageSubscription {
       if (typeof callback !== 'function')
-        throw fail('INVALID_ARGUMENT', 'Invalid storage observer')
+        throw fail('INVALID_ARGUMENT', 'コールバックには関数を指定してください')
       const onChange = (changes: Change[]) => {
         for (const c of changes) {
           let oldValue: unknown, newValue: unknown
@@ -139,7 +146,10 @@ export function createStorage<S>(
       },
       removeMany: async (names: readonly string[]) => {
         if (!Array.isArray(names))
-          throw fail('INVALID_ARGUMENT', 'Expected storage keys')
+          throw fail(
+            'INVALID_ARGUMENT',
+            'ストレージキーの配列を指定してください'
+          )
         await execute('remove', names.map(full))
       },
       namespace: (p: string) => {
@@ -160,13 +170,24 @@ export function createStorage<S>(
           ? watch(undefined, names, cb as StorageWatchOptions | undefined)
           : watch(keys(names).map(full), cb as (change: unknown) => void, opts),
       migrate: async (plan: MigrationPlan) => {
-        if (bridge) throw fail('ACCESS_DENIED', 'MAIN cannot migrate storage')
+        if (bridge)
+          throw fail(
+            'ACCESS_DENIED',
+            'MAIN world ではストレージを移行できません'
+          )
         if (runtime().mode() !== 'direct')
-          throw fail('ACCESS_DENIED', 'Content Scripts cannot migrate storage')
+          throw fail(
+            'ACCESS_DENIED',
+            'Content Script ではストレージを移行できません'
+          )
         return await runtime().engine.migrate(area, prefix, plan)
       },
       exposeToPage: (target: PageBridge, policy: PageStoragePolicy<S>) => {
-        if (bridge) throw fail('ACCESS_DENIED', 'MAIN cannot expose storage')
+        if (bridge)
+          throw fail(
+            'ACCESS_DENIED',
+            'MAIN world ではストレージを公開できません'
+          )
         return expose(runtime(), area, prefix, target, policy)
       },
     } as unknown as StorageClient<S>

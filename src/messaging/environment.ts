@@ -17,7 +17,7 @@ export class Environment {
     if (!method)
       throw fail(
         path[0] === 'storage' ? 'PERMISSION_DENIED' : 'CONTEXT_UNAVAILABLE',
-        `Missing ${path.join('.')}`
+        `${path.join('.')} がありません`
       )
     try {
       return await method(...args)
@@ -32,7 +32,7 @@ export class Environment {
     const add = this.method(...path, 'addListener')
     const remove = this.method(...path, 'removeListener')
     if (!add || !remove)
-      throw fail('CONTEXT_UNAVAILABLE', `Missing ${path.join('.')}`)
+      throw fail('CONTEXT_UNAVAILABLE', `${path.join('.')} がありません`)
     add(listener)
     return () => {
       remove(listener)

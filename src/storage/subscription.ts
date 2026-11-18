@@ -21,7 +21,10 @@ export function subscription(
     active = false
     if (!settled)
       cancel(
-        fail('TRANSPORT_CLOSED', 'Storage subscription removed before ready')
+        fail(
+          'TRANSPORT_CLOSED',
+          '準備が完了する前にストレージの購読が解除されました'
+        )
       )
     cleanup()
   }

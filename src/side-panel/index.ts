@@ -62,7 +62,7 @@ function convert(operation: string, cause: unknown): WebextError {
 function root(operation: string): URL {
   const url = parseUrl(nativeMethod('runtime', 'getURL')?.(''))
   if (!url || !isExtensionUrl(url, url))
-    fail('CONTEXT_UNAVAILABLE', operation, 'Extension runtime is unavailable')
+    fail('CONTEXT_UNAVAILABLE', operation, '拡張機能のランタイムを使えません')
   return url
 }
 
@@ -74,7 +74,7 @@ function native(operation: string): Native {
   return fail(
     'UNSUPPORTED_OPERATION',
     operation,
-    'Side panel API is unavailable. Check the manifest (side_panel / sidebar_action) and permissions.'
+    'サイドパネルの API を使えません。Manifest の side_panel / sidebar_action と権限を確認してください'
   )
 }
 
@@ -85,7 +85,7 @@ function call(
 ): Promise<unknown> {
   const method = nativeMethod(...path)
   if (!method)
-    fail('UNSUPPORTED_OPERATION', operation, `Missing ${path.join('.')}`)
+    fail('UNSUPPORTED_OPERATION', operation, `${path.join('.')} がありません`)
   try {
     return Promise.resolve(method(...args)).catch((cause) => {
       throw convert(operation, cause)
@@ -106,7 +106,7 @@ function windowOptions(value: unknown, operation: string): number | undefined {
     fail(
       'INVALID_ARGUMENT',
       operation,
-      'Expected { windowId?: number } with a nonnegative integer'
+      '{ windowId?: number } の形で、0 以上の整数を指定してください'
     )
   return options.windowId as number | undefined
 }
@@ -114,7 +114,11 @@ function windowOptions(value: unknown, operation: string): number | undefined {
 async function focusedWindow(operation: string): Promise<number> {
   const window = object(await call(operation, ['windows', 'getLastFocused']))
   if (!validId(window?.id))
-    fail('CONTEXT_UNAVAILABLE', operation, 'No browser window is focused')
+    fail(
+      'CONTEXT_UNAVAILABLE',
+      operation,
+      'フォーカスされているブラウザのウィンドウがありません'
+    )
   return window.id
 }
 
@@ -133,7 +137,7 @@ function pageUrl(value: unknown, operation: string, fromNative = false): URL {
     fail(
       fromNative ? 'UNSUPPORTED_OPERATION' : 'INVALID_ARGUMENT',
       operation,
-      'Side panel page must belong to this extension'
+      'サイドパネルのページがこの拡張機能のものではありません'
     )
   return url
 }
@@ -147,7 +151,7 @@ function manifestPage(operation: string): URL {
     fail(
       'CONTEXT_UNAVAILABLE',
       operation,
-      'The manifest does not define a default side panel page'
+      'Manifest に既定のサイドパネルのページが定義されていません'
     )
   return pageUrl(path, operation, true)
 }
@@ -172,7 +176,7 @@ async function chromeIsOpen(windowId: number): Promise<boolean> {
     contextTypes: ['SIDE_PANEL'],
   })
   if (!Array.isArray(contexts))
-    fail('NATIVE_ERROR', 'isOpen', 'Invalid runtime.getContexts result')
+    fail('NATIVE_ERROR', 'isOpen', 'runtime.getContexts の結果が不正です')
   if (!contexts.length) return false
   const ids = contexts.map((context) => object(context)?.windowId)
   if (ids.every(validId)) return ids.includes(windowId)
@@ -344,7 +348,11 @@ async function openState(windowId: number): Promise<boolean> {
     windowId,
   })
   if (typeof result !== 'boolean')
-    fail('NATIVE_ERROR', 'isOpen', 'Invalid native sidebar state')
+    fail(
+      'NATIVE_ERROR',
+      'isOpen',
+      'ブラウザから取得したサイドバーの状態が不正です'
+    )
   return result
 }
 
@@ -379,7 +387,7 @@ function pageTarget(
   return fail(
     'INVALID_ARGUMENT',
     operation,
-    'Expected { windowId } or { tabId } with a nonnegative integer'
+    '{ windowId } か { tabId } の形で、0 以上の整数を指定してください'
   )
 }
 
@@ -394,7 +402,7 @@ function session(operation: string, method: 'get' | 'set' | 'remove') {
     fail(
       'PERMISSION_DENIED',
       operation,
-      'Window and tab pages require the "storage" permission'
+      'ウィンドウ・タブごとのページには "storage" 権限が必要です'
     )
   return (value: unknown) =>
     call(operation, ['storage', 'session', method], value)
@@ -434,7 +442,11 @@ async function globalPage(operation: string): Promise<string> {
       await call(operation, ['sidePanel', 'getOptions'], {})
     )
     if (!options)
-      fail('NATIVE_ERROR', operation, 'Invalid native panel options')
+      fail(
+        'NATIVE_ERROR',
+        operation,
+        'ブラウザから取得したパネルの設定が不正です'
+      )
     path = options.path
   } else path = await call(operation, ['sidebarAction', 'getPanel'], {})
   if (path === undefined || path === '') return manifestPage(operation).href
@@ -547,7 +559,7 @@ async function getPage(target?: SidePanelPageTarget): Promise<string> {
       )
     const tab = object(await call('getPage', ['tabs', 'get'], scope.tabId))
     if (!validId(tab?.windowId))
-      fail('TAB_NOT_FOUND', 'getPage', 'The tab has no window')
+      fail('TAB_NOT_FOUND', 'getPage', 'タブがウィンドウに属していません')
     return await effectivePage('getPage', tab.windowId, scope.tabId)
   } catch (cause) {
     throw convert('getPage', cause)
@@ -625,12 +637,16 @@ function subscribe(type: EventType, listener: SidePanelListener): Unsubscribe {
   try {
     root(operation)
     if (typeof listener !== 'function')
-      fail('INVALID_ARGUMENT', operation, 'Expected a listener function')
+      fail('INVALID_ARGUMENT', operation, 'リスナーには関数を指定してください')
     if (!removeMessageListener) {
       const add = nativeMethod('runtime', 'onMessage', 'addListener')
       const remove = nativeMethod('runtime', 'onMessage', 'removeListener')
       if (!add || !remove)
-        fail('UNSUPPORTED_OPERATION', operation, 'Missing runtime.onMessage')
+        fail(
+          'UNSUPPORTED_OPERATION',
+          operation,
+          'runtime.onMessage がありません'
+        )
       const onMessage = (value: unknown, sender: unknown) => {
         const received = message(value, ['opened', 'closed'])
         if (received && trusted(sender))
@@ -741,10 +757,10 @@ function registerPanel(): Subscription {
       fail(
         'CONTEXT_UNAVAILABLE',
         operation,
-        'registerPanel must be called in an extension page shown as the side panel'
+        'registerPanel() はサイドパネルとして表示している拡張機能のページで呼び出してください'
       )
     if (registration)
-      fail('INVALID_ARGUMENT', operation, 'The panel is already registered')
+      fail('INVALID_ARGUMENT', operation, 'パネルはすでに登録されています')
     const kind = native(operation)
     const addListener = nativeMethod('runtime', 'onMessage', 'addListener')
     const removeListener = nativeMethod(
@@ -753,7 +769,7 @@ function registerPanel(): Subscription {
       'removeListener'
     )
     if (!addListener || !removeListener)
-      fail('UNSUPPORTED_OPERATION', operation, 'Missing runtime.onMessage')
+      fail('UNSUPPORTED_OPERATION', operation, 'runtime.onMessage がありません')
     const page = url.href
     let windowId: number | undefined
     let active = true
@@ -872,9 +888,12 @@ function registerPanel(): Subscription {
     const ready = (async () => {
       const current = object(await call(operation, ['windows', 'getCurrent']))
       if (!validId(current?.id))
-        fail('CONTEXT_UNAVAILABLE', operation, 'The panel has no window')
-      if (!active)
-        fail('TRANSPORT_CLOSED', operation, 'Registration was removed')
+        fail(
+          'CONTEXT_UNAVAILABLE',
+          operation,
+          'パネルがウィンドウに属していません'
+        )
+      if (!active) fail('TRANSPORT_CLOSED', operation, '登録が解除されました')
       windowId = current.id
       registeredWindow = current.id
       watch(['tabs', 'onActivated'], (info: unknown) => {
@@ -956,18 +975,18 @@ function startBackground(
         typeof value.openOnActionClick !== 'boolean') ||
       (value.onError !== undefined && typeof value.onError !== 'function')
     )
-      fail('INVALID_ARGUMENT', operation, 'Invalid side panel options')
+      fail('INVALID_ARGUMENT', operation, 'サイドパネルのオプションが不正です')
     if (webextContext.get().kind !== 'background')
       fail(
         'CONTEXT_UNAVAILABLE',
         operation,
-        'startBackground must be called in the Background'
+        'startBackground() は Background で呼び出してください'
       )
     if (hub)
       fail(
         'INVALID_ARGUMENT',
         operation,
-        'Side panel Background already started'
+        'サイドパネルの Background はすでに起動しています'
       )
     const kind = native(operation)
     const stops: (() => void)[] = []
@@ -975,7 +994,11 @@ function startBackground(
       const add = nativeMethod(...path, 'addListener')
       const remove = nativeMethod(...path, 'removeListener')
       if (!add || !remove)
-        fail('UNSUPPORTED_OPERATION', operation, `Missing ${path.join('.')}`)
+        fail(
+          'UNSUPPORTED_OPERATION',
+          operation,
+          `${path.join('.')} がありません`
+        )
       add(listener)
       stops.push(() => remove(listener))
     }

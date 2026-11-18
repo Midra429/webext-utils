@@ -53,7 +53,7 @@ export abstract class PagePeer {
     extra: Record<string, unknown> = {}
   ): void {
     if (this.stopped || this.suspended)
-      throw fail('TRANSPORT_CLOSED', 'Page bridge closed')
+      throw fail('TRANSPORT_CLOSED', 'ブリッジは閉じています')
     this.page.emit(
       eventName(this.channel, !this.isolated),
       encode({
@@ -99,7 +99,7 @@ export abstract class PagePeer {
       (v.ok && v.error !== undefined) ||
       (!v.ok && v.value !== undefined)
     )
-      throw fail('VALIDATION_ERROR', 'Invalid page reply')
+      throw fail('VALIDATION_ERROR', 'ページの応答が不正です')
     return reply(
       {
         ...wire('reply'),
@@ -126,14 +126,14 @@ export abstract class PagePeer {
       ok: false,
       error: {
         code: e.code,
-        message: `Page bridge request failed (${e.code})`,
+        message: `ブリッジの要求が失敗しました（${e.code}）`,
       },
     })
   }
   protected reset(): void {
     this.epoch++
     for (const cancel of this.cancellations)
-      cancel(fail('TRANSPORT_CLOSED', 'Page bridge disconnected'))
+      cancel(fail('TRANSPORT_CLOSED', 'ブリッジが切断されました'))
     this.cancellations.clear()
     this.pending.clear()
   }

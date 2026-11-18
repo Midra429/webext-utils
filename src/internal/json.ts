@@ -58,7 +58,7 @@ export function assertJson(
     throw new WebextError(
       'SERIALIZATION_ERROR',
       operation,
-      'Expected bounded JSON-compatible data'
+      '上限内に収まる JSON 互換の値を指定してください'
     )
   }
   try {
@@ -70,7 +70,7 @@ export function assertJson(
     throw new WebextError(
       'SERIALIZATION_ERROR',
       operation,
-      'JSON validation failed',
+      'JSON 互換かどうかの検査に失敗しました',
       { cause: error }
     )
   }

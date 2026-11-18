@@ -115,7 +115,7 @@ export function nativeError(operation: string, cause: unknown): WebextError {
     : new WebextError(
         'NATIVE_ERROR',
         operation,
-        `Native operation failed: ${operation}`,
+        `ブラウザ API の呼び出しに失敗しました: ${operation}`,
         { cause }
       )
 }

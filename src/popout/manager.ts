@@ -74,7 +74,7 @@ export class PopoutManager {
   async locked<T>(work: () => Promise<T>): Promise<T> {
     const locks = globalThis.navigator?.locks
     if (!locks)
-      fail('UNSUPPORTED_OPERATION', 'Popout management requires Web Locks')
+      fail('UNSUPPORTED_OPERATION', 'popout の管理には Web Locks が必要です')
     return await locks.request(`${POPOUT_KEY_PREFIX}manager`, work)
   }
   private async write(record: Saved): Promise<void> {
@@ -87,7 +87,7 @@ export class PopoutManager {
   }
   async reconcile(attempt = 0): Promise<Ready[]> {
     const entries = object(await call(['storage', 'session', 'get'], null))
-    if (!entries) fail('NATIVE_ERROR', 'Invalid native state')
+    if (!entries) fail('NATIVE_ERROR', 'ブラウザから取得した状態が不正です')
     this.records.clear()
     for (const [name, value] of Object.entries(entries)) {
       if (!name.startsWith(POPOUT_KEY_PREFIX)) continue
@@ -96,7 +96,8 @@ export class PopoutManager {
       else await call(['storage', 'session', 'remove'], name)
     }
     const windows = await call(['windows', 'getAll'], { populate: true })
-    if (!Array.isArray(windows)) fail('NATIVE_ERROR', 'Invalid native state')
+    if (!Array.isArray(windows))
+      fail('NATIVE_ERROR', 'ブラウザから取得した状態が不正です')
     const live = windows.map(object).filter((w) => !!w)
     const records: Ready[] = []
     for (const record of this.records.values()) {
@@ -151,14 +152,17 @@ export class PopoutManager {
         if (attempt >= 40)
           fail(
             'CONTEXT_UNAVAILABLE',
-            'Popout initial navigation is still loading'
+            'popout の最初の読み込みがまだ完了していません'
           )
         await new Promise((resolve) => setTimeout(resolve, 25))
         return await this.reconcile(attempt + 1)
       }
       if (record.status === 'pending') {
         if (matches.length > 1)
-          fail('INVALID_ARGUMENT', 'Pending popout has multiple live matches')
+          fail(
+            'INVALID_ARGUMENT',
+            '作成中の popout に一致するウィンドウが複数あります'
+          )
         const match = matches[0]
         if (!match) {
           await this.remove(record.token)
@@ -211,7 +215,7 @@ export class PopoutManager {
       if (!validId(tab?.id))
         fail(
           'CONTEXT_UNAVAILABLE',
-          'No active tab in source window; specify page'
+          '元のウィンドウにアクティブなタブがありません。page を指定してください'
         )
       target = { tabId: tab.id }
     }
@@ -222,7 +226,7 @@ export class PopoutManager {
     if (value === undefined || value === '')
       fail(
         'CONTEXT_UNAVAILABLE',
-        'The popup has no page; specify page explicitly'
+        'popup のページを特定できません。page を明示してください'
       )
     return {
       ...opts,
@@ -240,7 +244,7 @@ export class PopoutManager {
           (r) => r.options.reuseKey === resolved.reuseKey
         )
         if (existing.length > 1)
-          fail('INVALID_ARGUMENT', 'Duplicate reuseKey records')
+          fail('INVALID_ARGUMENT', '同じ reuseKey の記録が重複しています')
         const record = existing[0]
         if (record) {
           if (
@@ -248,7 +252,10 @@ export class PopoutManager {
             record.page !== resolved.page ||
             record.associatedTabId !== resolved.associatedTabId
           )
-            fail('INVALID_ARGUMENT', 'reuseKey configuration differs')
+            fail(
+              'INVALID_ARGUMENT',
+              '同じ reuseKey に異なる設定が指定されました'
+            )
           await call(['windows', 'update'], record.windowId, { focused: true })
           return record
         }
@@ -261,7 +268,7 @@ export class PopoutManager {
         ['storage', 'session', 'remove'],
       ])
         if (!nativeMethod(...path))
-          fail('UNSUPPORTED_OPERATION', `Missing ${path.join('.')}`)
+          fail('UNSUPPORTED_OPERATION', `${path.join('.')} がありません`)
       const token = crypto.randomUUID()
       const requested = {
         width: resolved.width ?? 480,
@@ -295,14 +302,17 @@ export class PopoutManager {
           })
         )
         if (!validId(created?.id))
-          fail('NATIVE_ERROR', 'Window creation returned no ID')
+          fail('NATIVE_ERROR', '作成したウィンドウの ID を取得できません')
         const tabs = Array.isArray(created.tabs)
           ? created.tabs
           : await call(['tabs', 'query'], { windowId: created.id })
         const tab =
           Array.isArray(tabs) && tabs.length === 1 ? object(tabs[0]) : undefined
         if (!validId(tab?.id))
-          fail('NATIVE_ERROR', 'Window creation returned no unique tab')
+          fail(
+            'NATIVE_ERROR',
+            '作成したウィンドウのタブを 1 つに特定できません'
+          )
         const ready: Ready = {
           ...record,
           status: 'ready',
@@ -321,7 +331,7 @@ export class PopoutManager {
           throw new WebextError(
             'NATIVE_ERROR',
             'popout.open',
-            'Creation failed and compensation failed',
+            '作成に失敗し、その後始末にも失敗しました',
             {
               cause,
               details: {
@@ -369,13 +379,16 @@ export class PopoutManager {
       )
       return
     }
-    return fail('INVALID_ARGUMENT', 'Unknown popout operation')
+    return fail('INVALID_ARGUMENT', '不明な popout の操作です')
   }
   startBackground(): Unsubscribe {
     if (webextContext.get().kind !== 'background')
-      fail('CONTEXT_UNAVAILABLE', 'Register popout management in Background')
+      fail(
+        'CONTEXT_UNAVAILABLE',
+        'popout の管理は Background で登録してください'
+      )
     if (this.started)
-      fail('INVALID_ARGUMENT', 'Popout Background already registered')
+      fail('INVALID_ARGUMENT', 'popout の Background はすでに登録されています')
     const stops: Unsubscribe[] = []
     try {
       stops.push(
@@ -385,7 +398,7 @@ export class PopoutManager {
           async (value, sender) => {
             const url = parseUrl(sender.url)
             if (sender.id !== new Environment().value('runtime', 'id'))
-              fail('ACCESS_DENIED', 'Foreign extension sender')
+              fail('ACCESS_DENIED', '送信元が他の拡張機能です')
             if (
               sender.trust !== 'extension' ||
               sender.context !== 'extension-page' ||
@@ -394,7 +407,7 @@ export class PopoutManager {
             )
               fail(
                 'ACCESS_DENIED',
-                'Popout RPC requires a native extension-page sender'
+                'popout の RPC は拡張機能のページからのみ使えます'
               )
             const v = object(value)
             if (
@@ -402,7 +415,7 @@ export class PopoutManager {
               typeof v.operation !== 'string' ||
               Object.keys(v).some((k) => !['operation', 'value'].includes(k))
             )
-              fail('INVALID_ARGUMENT', 'Invalid popout request')
+              fail('INVALID_ARGUMENT', 'popout の要求が不正です')
             try {
               const result = await this.request(v.operation, v.value)
               return {
@@ -513,7 +526,7 @@ export class PopoutManager {
         const add = nativeMethod(...path, 'addListener'),
           remove = nativeMethod(...path, 'removeListener')
         if (!add || !remove)
-          fail('UNSUPPORTED_OPERATION', `Missing ${path.join('.')}`)
+          fail('UNSUPPORTED_OPERATION', `${path.join('.')} がありません`)
         add(listener)
         stops.push(() => {
           remove(listener)
@@ -543,7 +556,7 @@ export async function request(
   const base = root()
   const url = parseUrl(globalThis.location?.href)
   if (!url || !isExtensionUrl(url, base) || !globalThis.document)
-    fail('ACCESS_DENIED', 'Popout management requires an extension page')
+    fail('ACCESS_DENIED', 'popout の管理は拡張機能のページでのみ使えます')
   // A pending token page cannot yet be classified as popout. The native own
   // extension URL proves eligibility to call this service, not popout ownership.
   // Use the existing messaging transport with this narrow service-only context.
@@ -571,7 +584,7 @@ export async function request(
     typeof error.code !== 'string' ||
     typeof error.message !== 'string'
   )
-    fail('NATIVE_ERROR', 'Invalid popout service reply')
+    fail('NATIVE_ERROR', 'popout サービスの応答が不正です')
   throw new WebextError(error.code as ErrorCode, 'popout', error.message, {
     ...(error.cause === undefined ? {} : { cause: error.cause }),
     ...(object(error.details) ? { details: object(error.details)! } : {}),

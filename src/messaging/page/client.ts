@@ -56,7 +56,7 @@ export class PageClient extends PagePeer {
     const cancellations = new Set<(error: ReturnType<typeof fail>) => void>()
     const active = () => {
       if (disposed || this.stopped || this.suspended)
-        throw fail('TRANSPORT_CLOSED', 'Page client closed')
+        throw fail('TRANSPORT_CLOSED', 'ページのクライアントは閉じています')
     }
     const send = async (
       key: string,
@@ -75,7 +75,7 @@ export class PageClient extends PagePeer {
         (options.ignoreMissing !== undefined &&
           typeof options.ignoreMissing !== 'boolean')
       )
-        throw fail('INVALID_ARGUMENT', 'Invalid page send options')
+        throw fail('INVALID_ARGUMENT', 'ページからの送信オプションが不正です')
       if (options.target) target(options.target)
       encode({ data: data === undefined ? null : data })
       // Validate before initiating a handshake or dispatch.
@@ -86,7 +86,7 @@ export class PageClient extends PagePeer {
             await this.ready()
             active()
             if (Date.now() >= started + timeout)
-              throw fail('TIMEOUT', 'Page send deadline exceeded')
+              throw fail('TIMEOUT', 'ページからの送信が期限を過ぎました')
             const value = this.result(
               await this.exchange(
                 'request',
@@ -124,23 +124,23 @@ export class PageClient extends PagePeer {
         send(key, data, options, 'notify'),
       notifyAll: async () => {
         active()
-        throw fail('ACCESS_DENIED', 'Page broadcast is not allowed')
+        throw fail('ACCESS_DENIED', 'ページからの一斉送信は許可されていません')
       },
       installPageBridge: () => {
-        throw fail('ACCESS_DENIED', 'MAIN cannot install a privileged bridge')
+        throw fail('ACCESS_DENIED', 'MAIN world ではブリッジを設置できません')
       },
       on: (key: string, handler: Handler): Unsubscribe => {
         active()
         name(key)
         if (typeof handler !== 'function')
-          throw fail('INVALID_ARGUMENT', 'Invalid page handler')
+          throw fail('INVALID_ARGUMENT', 'ハンドラーには関数を指定してください')
         const registered =
           names.get(this.page.document) ?? new Map<string, object>()
         names.set(this.page.document, registered)
         if (registered.has(key))
           throw fail(
             'INVALID_ARGUMENT',
-            'Handler already registered in this realm'
+            'この実行環境では、このメッセージ名のハンドラーがすでに登録されています'
           )
         registered.set(key, owner)
         this.handlers.set(key, { owner, handler, pending: new Set() })
@@ -154,7 +154,12 @@ export class PageClient extends PagePeer {
           subscribed = false
           if (this.handlers.get(key)?.owner === owner) {
             for (const cancel of this.handlers.get(key)!.pending)
-              cancel(fail('TRANSPORT_CLOSED', 'Page subscription removed'))
+              cancel(
+                fail(
+                  'TRANSPORT_CLOSED',
+                  'ページのハンドラー登録が解除されました'
+                )
+              )
             this.handlers.delete(key)
             registered.delete(key)
             this.revision++
@@ -175,13 +180,15 @@ export class PageClient extends PagePeer {
         if (disposed) return
         disposed = true
         for (const cancel of cancellations)
-          cancel(fail('TRANSPORT_CLOSED', 'Page client disposed'))
+          cancel(
+            fail('TRANSPORT_CLOSED', 'ページのクライアントが破棄されました')
+          )
         cancellations.clear()
         this.owners.delete(owner)
         for (const [key, entry] of this.handlers)
           if (entry.owner === owner) {
             for (const cancel of entry.pending)
-              cancel(fail('TRANSPORT_CLOSED', 'Page receiver disposed'))
+              cancel(fail('TRANSPORT_CLOSED', 'ページの受信側が破棄されました'))
             this.handlers.delete(key)
             names.get(this.page.document)?.delete(key)
             this.revision++
@@ -227,7 +234,7 @@ export class PageClient extends PagePeer {
   }
   async ready(): Promise<void> {
     if (this.stopped || this.suspended)
-      throw fail('TRANSPORT_CLOSED', 'Page bridge closed')
+      throw fail('TRANSPORT_CLOSED', 'ブリッジは閉じています')
     if (this.connecting) await this.connecting
     if (this.accepted === this.revision) return
     const revision = this.revision
@@ -289,11 +296,12 @@ export class PageClient extends PagePeer {
       epoch = this.epoch
     try {
       if (this.inFlight.has(id))
-        throw fail('VALIDATION_ERROR', 'Duplicate page request ID')
+        throw fail('VALIDATION_ERROR', 'ページへの要求 ID が重複しています')
       this.inFlight.add(id)
       name(v.name)
       const entry = this.handlers.get(v.name)
-      if (!entry) throw fail('NO_RECEIVER', 'No page handler')
+      if (!entry)
+        throw fail('NO_RECEIVER', 'ページにハンドラーが登録されていません')
       const sender = object(v.sender)
       if (
         !sender ||
@@ -303,7 +311,7 @@ export class PageClient extends PagePeer {
           String(sender.context)
         )
       )
-        throw fail('VALIDATION_ERROR', 'Invalid page sender')
+        throw fail('VALIDATION_ERROR', 'ページへの要求の送信元情報が不正です')
       const timeout = v.timeoutMs ?? DEFAULT_TIMEOUT
       if (
         typeof timeout !== 'number' ||
@@ -311,7 +319,7 @@ export class PageClient extends PagePeer {
         timeout <= 0 ||
         timeout > 2147483647
       )
-        throw fail('VALIDATION_ERROR', 'Invalid page request timeout')
+        throw fail('VALIDATION_ERROR', 'ページへの要求のタイムアウトが不正です')
       const value = await deadline(
         Promise.resolve().then(async () => {
           try {
@@ -320,7 +328,10 @@ export class PageClient extends PagePeer {
               sender as unknown as MessageSender
             )
           } catch {
-            throw fail('HANDLER_ERROR', 'Page handler failed')
+            throw fail(
+              'HANDLER_ERROR',
+              'ページのハンドラーで例外が発生しました'
+            )
           }
         }),
         Date.now() + timeout,

@@ -24,7 +24,7 @@ export function port(value: unknown): Port {
     typeof object(p.onMessage)?.addListener !== 'function' ||
     typeof object(p.onDisconnect)?.addListener !== 'function'
   )
-    throw fail('VALIDATION_ERROR', 'Invalid native Port')
+    throw fail('VALIDATION_ERROR', 'ブラウザの Port が不正です')
   return p as unknown as Port
 }
 export function observe(

@@ -180,7 +180,7 @@ function registered(info: ContextInfo, env: Environment): ContextInfo {
     throw new WebextError(
       'INVALID_ARGUMENT',
       'context.register',
-      'Registration contradicts the native context'
+      '登録内容がブラウザから判定した実行場所と矛盾します'
     )
   }
   return { ...info, ...role, source: 'registered' }
@@ -228,7 +228,7 @@ async function resolve(): Promise<ContextInfo> {
       throw new WebextError(
         'CONTEXT_UNAVAILABLE',
         'context.resolve',
-        'No extension execution context is available'
+        '拡張機能の実行場所を特定できません'
       )
     // BFCache keeps the realm alive. Drop cached native identity on departure
     // and restoration, and prevent in-flight work from restoring an old result.
@@ -263,7 +263,7 @@ async function resolve(): Promise<ContextInfo> {
         throw new WebextError(
           'NATIVE_ERROR',
           'context.resolve',
-          'Invalid getContexts result'
+          'runtime.getContexts の結果が不正です'
         )
       // A URL alone is never an identity. Restrict by self tab/window and known
       // native role, then require a single candidate.
@@ -348,7 +348,7 @@ async function resolve(): Promise<ContextInfo> {
       throw new WebextError(
         'CONTEXT_UNAVAILABLE',
         'context.resolve',
-        'Document changed while resolving its context'
+        '実行場所の判定中にドキュメントが変わりました'
       )
     }
     // Validate before caching so a conflicting registration cannot poison get().
@@ -401,14 +401,14 @@ function register(role: ContextRegistration): Unsubscribe {
     throw new WebextError(
       'INVALID_ARGUMENT',
       'context.register',
-      'Invalid context registration'
+      '実行場所の登録内容が不正です'
     )
   }
   if ([...registrations].some((existing) => !sameRole(existing, role)))
     throw new WebextError(
       'INVALID_ARGUMENT',
       'context.register',
-      'A different context is already registered'
+      '別の実行場所がすでに登録されています'
     )
   const copy = Object.freeze({ ...role })
   registrations.add(copy)
