@@ -31,7 +31,7 @@ export function key(value: unknown): asserts value is string {
   if (!value.includes('.') && PROTOTYPE_KEYS.has(value))
     throw fail(
       'INVALID_ARGUMENT',
-      `"${value}" cannot be used as a top-level storage key; use a namespace such as "app.${value}"`
+      `"${value}" は最上位のストレージキーに使えません。"app.${value}" のように namespace を付けてください`
     )
 }
 
@@ -57,7 +57,7 @@ export function segments(value: unknown): asserts value is string {
           ['__proto__', 'constructor', 'prototype'].includes(p)
       )
   )
-    throw fail('INVALID_ARGUMENT', 'Invalid or reserved storage key')
+    throw fail('INVALID_ARGUMENT', 'ストレージキーが不正、または予約済みです')
 }
 export function within(full: string, prefix: string): boolean {
   return !prefix || full.startsWith(`${prefix}.`)
@@ -92,7 +92,7 @@ export function clone<T>(value: T): T {
 }
 export function keys(value: unknown): string[] {
   if (!Array.isArray(value))
-    throw fail('INVALID_ARGUMENT', 'Expected storage keys')
+    throw fail('INVALID_ARGUMENT', 'ストレージキーの配列を指定してください')
   value.forEach(key)
   return [...new Set(value)] as string[]
 }

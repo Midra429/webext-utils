@@ -40,7 +40,10 @@ function origin(value: string): string {
     url.username ||
     url.password
   )
-    throw fail('ACCESS_DENIED', 'Page origin must be HTTP(S)')
+    throw fail(
+      'ACCESS_DENIED',
+      'ページのオリジンは HTTP(S) でなければなりません'
+    )
   return url.origin
 }
 export function validate(
@@ -53,7 +56,7 @@ export function validate(
   } catch {
     /* A validator failure never crosses into the page. */
   }
-  throw fail('VALIDATION_ERROR', 'Page policy validation failed')
+  throw fail('VALIDATION_ERROR', 'ページとの通信データが検証に通りませんでした')
 }
 function sameTarget(a: unknown, b: MessageTarget): boolean {
   const normalize = (v: unknown) => {
@@ -99,7 +102,10 @@ export class IsolatedBridge extends PagePeer implements PageBridge {
           typeof rule.validateData !== 'function' ||
           typeof rule.validateResponse !== 'function'
         )
-          throw fail('INVALID_ARGUMENT', 'Both page validators are required')
+          throw fail(
+            'INVALID_ARGUMENT',
+            'validateData と validateResponse の両方が必要です'
+          )
         result[key] = {
           validateData: rule.validateData,
           validateResponse: rule.validateResponse,
@@ -117,7 +123,10 @@ export class IsolatedBridge extends PagePeer implements PageBridge {
     this.checkOrigin()
     const installed = installations.get(page.document) ?? new Set<string>()
     if (installed.has(this.channel))
-      throw fail('INVALID_ARGUMENT', 'Page channel already installed')
+      throw fail(
+        'INVALID_ARGUMENT',
+        'このチャネルのブリッジはすでに設置されています'
+      )
     installed.add(this.channel)
     installations.set(page.document, installed)
     serviceHosts.set(this, new Map())
@@ -131,18 +140,19 @@ export class IsolatedBridge extends PagePeer implements PageBridge {
       origin(actual) !== origin(this.page.href()) ||
       !this.policy.allowedOrigins.includes(origin(actual))
     )
-      throw fail('ACCESS_DENIED', 'Page origin is not allowed')
+      throw fail('ACCESS_DENIED', 'このページのオリジンは許可されていません')
   }
   private admit(id: string): void {
     this.checkOrigin()
     if (this.activeIds.has(id))
-      throw fail('VALIDATION_ERROR', 'Duplicate page request ID')
+      throw fail('VALIDATION_ERROR', 'ページの要求 ID が重複しています')
     this.activeIds.add(id)
   }
   /** Time left of a page request that may have waited in the queue. */
   private remaining(received: number, timeout: number): number {
     const left = timeout - (Date.now() - received)
-    if (left <= 0) throw fail('TIMEOUT', 'Page request expired in the queue')
+    if (left <= 0)
+      throw fail('TIMEOUT', 'ページの要求が待機中に期限切れになりました')
     return left
   }
   protected async handle(v: Record<string, unknown>): Promise<void> {
@@ -164,7 +174,10 @@ export class IsolatedBridge extends PagePeer implements PageBridge {
           ) ||
           new Set(v.names).size !== v.names.length
         )
-          throw fail('ACCESS_DENIED', 'Page handler is not allowed')
+          throw fail(
+            'ACCESS_DENIED',
+            'このハンドラーはページに許可されていません'
+          )
         const names = v.names as string[]
         const task = async () => {
           if (epoch !== this.epoch || this.stopped || this.suspended) return
@@ -217,10 +230,14 @@ export class IsolatedBridge extends PagePeer implements PageBridge {
       if (v.session !== this.session) return
       if (v.type === 'service') {
         const service = serviceHosts.get(this)?.get(String(v.name))
-        if (!service) throw fail('ACCESS_DENIED', 'Page service is not exposed')
+        if (!service)
+          throw fail(
+            'ACCESS_DENIED',
+            'このサービスはページに公開されていません'
+          )
         const value = await serialize(this.page.document, async () => {
           if (!current())
-            throw fail('TRANSPORT_CLOSED', 'Page bridge disconnected')
+            throw fail('TRANSPORT_CLOSED', 'ブリッジが切断されました')
           return await deadline(
             service.request(v.data, (data) => {
               this.checkOrigin()
@@ -246,7 +263,7 @@ export class IsolatedBridge extends PagePeer implements PageBridge {
         return
       }
       if (v.type !== 'request')
-        throw fail('ACCESS_DENIED', 'Invalid page operation')
+        throw fail('ACCESS_DENIED', 'ページの操作が不正です')
       {
         name(v.name)
         if (
@@ -254,10 +271,13 @@ export class IsolatedBridge extends PagePeer implements PageBridge {
           !['send', 'notify'].includes(String(v.mode)) ||
           !Object.hasOwn(this.policy.fromPage, v.name)
         )
-          throw fail('ACCESS_DENIED', 'Page operation is not allowed')
+          throw fail('ACCESS_DENIED', 'この操作はページに許可されていません')
         const rule = this.policy.fromPage[v.name]!
         if (v.target !== undefined && !sameTarget(v.target, rule.target!))
-          throw fail('ACCESS_DENIED', 'Page target is fixed by policy')
+          throw fail(
+            'ACCESS_DENIED',
+            'この操作の宛先はポリシーで固定されています'
+          )
         validate(rule, 'validateData', v.data)
         const timeout = v.timeoutMs ?? DEFAULT_TIMEOUT
         if (
@@ -266,11 +286,11 @@ export class IsolatedBridge extends PagePeer implements PageBridge {
           timeout <= 0 ||
           timeout > 2147483647
         )
-          throw fail('INVALID_ARGUMENT', 'Invalid page timeout')
+          throw fail('INVALID_ARGUMENT', 'ページのタイムアウトが不正です')
         const messageName = v.name
         const value = await serialize(this.page.document, async () => {
           if (!current())
-            throw fail('TRANSPORT_CLOSED', 'Page bridge disconnected')
+            throw fail('TRANSPORT_CLOSED', 'ブリッジが切断されました')
           const left = this.remaining(received, timeout)
           return await deadline(
             this.hub.send(

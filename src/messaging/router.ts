@@ -103,7 +103,7 @@ export class Router {
             for (const [id, pending] of this.pending)
               if (pending.port === p) {
                 pending.reject(
-                  fail('TRANSPORT_CLOSED', 'Receiver disconnected')
+                  fail('TRANSPORT_CLOSED', '受信側との接続が切れました')
                 )
                 this.pending.delete(id)
               }
@@ -132,7 +132,8 @@ export class Router {
       typeof object(value)?.id === 'string' ? String(object(value)?.id) : ''
     try {
       const v = envelope(value)
-      if (!v || !id) throw fail('VALIDATION_ERROR', 'Invalid Port envelope')
+      if (!v || !id)
+        throw fail('VALIDATION_ERROR', 'Port のメッセージ形式が不正です')
       if (v.type === 'reply') {
         const pending = this.pending.get(id)
         if (pending?.port === p) {
@@ -142,7 +143,7 @@ export class Router {
         return
       }
       if (v.type !== 'register' && v.type !== 'unregister')
-        throw fail('VALIDATION_ERROR', 'Unknown Port command')
+        throw fail('VALIDATION_ERROR', '不明な Port コマンドです')
       const claimed = object(v.endpoint)
       if (
         !claimed ||
@@ -156,7 +157,7 @@ export class Router {
           (n) => typeof n === 'string' && n.length > 0 && n.length <= 256
         )
       )
-        throw fail('VALIDATION_ERROR', 'Invalid endpoint registration')
+        throw fail('VALIDATION_ERROR', 'エンドポイントの登録内容が不正です')
       const from = this.env.sender(p.sender)
       // Role labels describe views; only native metadata confers identity.
       const context = claimed.context
@@ -171,7 +172,7 @@ export class Router {
           'devtools',
         ].includes(String(context))
       )
-        throw fail('VALIDATION_ERROR', 'Invalid endpoint context')
+        throw fail('VALIDATION_ERROR', 'エンドポイントの実行場所が不正です')
       const e: Endpoint = {
         instanceId: claimed.instanceId,
         generation: claimed.generation,
@@ -190,7 +191,7 @@ export class Router {
       )
         throw fail(
           'ACCESS_DENIED',
-          'Endpoint context disagrees with native sender'
+          'エンドポイントの実行場所がブラウザの送信元情報と一致しません'
         )
       for (const key of [
         'tabId',
@@ -223,20 +224,26 @@ export class Router {
           !validId(e.frameId) ||
           (claimed.world !== 'ISOLATED' && claimed.world !== 'MAIN')
         )
-          throw fail('ACCESS_DENIED', 'Content endpoint lacks native identity')
+          throw fail(
+            'ACCESS_DENIED',
+            'Content Script のエンドポイントにブラウザの送信元情報がありません'
+          )
         e.world = claimed.world as 'ISOLATED' | 'MAIN'
       }
       if (v.type === 'register' && e.names.length) await this.refreshWindow(e)
       const existing = this.endpoints.get(e.instanceId)
       if (existing && existing.port !== p)
-        throw fail('ACCESS_DENIED', 'Duplicate endpoint identity')
+        throw fail('ACCESS_DENIED', 'エンドポイントの ID が重複しています')
       await this.serialize(async () => {
         const current = this.endpoints.get(e.instanceId)
         if (
           current &&
           (current.port !== p || current.endpoint.generation >= e.generation)
         )
-          throw fail('VALIDATION_ERROR', 'Stale endpoint generation')
+          throw fail(
+            'VALIDATION_ERROR',
+            'エンドポイントの登録が古い世代のものです'
+          )
         const key = `${RECORD_PREFIX}${e.instanceId}`
         if (v.type === 'unregister' || !e.names.length) {
           await this.env.call(['storage', 'session', 'remove'], key)
@@ -260,10 +267,10 @@ export class Router {
   private async refreshWindow(e: Endpoint): Promise<void> {
     if (e.tabId === undefined) return
     const get = this.env.method('tabs', 'get')
-    if (!get) throw fail('CONTEXT_UNAVAILABLE', 'tabs.get unavailable')
+    if (!get) throw fail('CONTEXT_UNAVAILABLE', 'tabs.get を使えません')
     const tab = object(await get(e.tabId))
     if (!validId(tab?.windowId))
-      throw fail('CONTEXT_UNAVAILABLE', 'Tab has no current window')
+      throw fail('CONTEXT_UNAVAILABLE', 'タブがウィンドウに属していません')
     e.windowId = tab.windowId
   }
   private async restore(until: number): Promise<void> {
@@ -279,7 +286,10 @@ export class Router {
   private async restoreCandidates(until: number): Promise<void> {
     // Background-only messaging works without storage permission.
     if (!this.env.method('storage', 'session', 'get'))
-      throw fail('PERMISSION_DENIED', 'View routing requires storage.session')
+      throw fail(
+        'PERMISSION_DENIED',
+        'Background 以外との送受信には storage.session が必要です'
+      )
     const records = await this.serialize(() =>
       this.env.call(['storage', 'session', 'get'], null)
     )
@@ -310,7 +320,7 @@ export class Router {
           (e.documentId !== undefined && typeof e.documentId !== 'string') ||
           !e.names.every((n) => typeof n === 'string')
         )
-          throw fail('VALIDATION_ERROR', 'Invalid saved endpoint')
+          throw fail('VALIDATION_ERROR', '保存済みのエンドポイントが不正です')
         if (this.endpoints.has(e.instanceId)) return
         const control = wire('reconnect', {
           id: crypto.randomUUID(),
@@ -324,12 +334,18 @@ export class Router {
               ? this.env.method('tabs', 'sendMessage')
               : this.env.method('runtime', 'sendMessage')
           if (!operation)
-            throw fail('CONTEXT_UNAVAILABLE', 'Reconnect transport unavailable')
+            throw fail(
+              'CONTEXT_UNAVAILABLE',
+              '再接続に使う通信手段がありません'
+            )
           if (
             e.context === 'content-script' &&
             (!validId(e.tabId) || !validId(e.frameId))
           )
-            throw fail('VALIDATION_ERROR', 'Invalid saved content identity')
+            throw fail(
+              'VALIDATION_ERROR',
+              '保存済みの Content Script の識別情報が不正です'
+            )
           const options =
             typeof e.documentId === 'string'
               ? { documentId: e.documentId }
@@ -362,19 +378,24 @@ export class Router {
         }
         reply(ack, String(object(control)?.id))
         if (!this.endpoints.has(e.instanceId))
-          throw fail('TRANSPORT_CLOSED', 'Reconnect ACK without registration')
+          throw fail('TRANSPORT_CLOSED', '再接続の確認後に登録が見つかりません')
       })
     )
   }
   async route(r: Request, from: MessageSender): Promise<Reply> {
     try {
       if (r.page && from.context !== 'content-script')
-        throw fail('ACCESS_DENIED', 'Page relay requires native content sender')
+        throw fail(
+          'ACCESS_DENIED',
+          'ページからの中継には Content Script の送信元情報が必要です'
+        )
       from = { ...from, trust: r.page ? 'page' : 'extension' }
       if (from.trust === 'page' && r.name.startsWith('__webext_utils'))
-        throw fail('ACCESS_DENIED', 'Page cannot call internal services')
-      if (this.stopped) throw fail('ROUTER_UNAVAILABLE', 'Router stopped')
-      if (r.deadline <= Date.now()) throw fail('TIMEOUT', 'Request expired')
+        throw fail('ACCESS_DENIED', 'ページから内部サービスは呼び出せません')
+      if (this.stopped)
+        throw fail('ROUTER_UNAVAILABLE', 'ルーターは停止しています')
+      if (r.deadline <= Date.now())
+        throw fail('TIMEOUT', '要求の期限が切れました')
       if (r.target.context === 'background') {
         const response = await deadline(
           this.dispatch(r, from),
@@ -419,9 +440,13 @@ export class Router {
           c.endpoint.names.includes(r.name) &&
           matches(c.endpoint, r.target, r.mode === 'all')
       )
-      if (!selected.length) throw fail('NO_RECEIVER', 'No registered receiver')
+      if (!selected.length)
+        throw fail('NO_RECEIVER', '宛先に一致する受信ハンドラーがありません')
       if (r.mode !== 'all' && selected.length !== 1)
-        throw fail('AMBIGUOUS_TARGET', 'More than one receiver matches')
+        throw fail(
+          'AMBIGUOUS_TARGET',
+          '宛先に複数の受信ハンドラーが一致しました'
+        )
       if (r.mode === 'all') {
         const results = await Promise.all(
           selected.map(async (c) => {
@@ -481,9 +506,9 @@ export class Router {
   stop(): void {
     this.stopped = true
     for (const cancel of this.tasks)
-      cancel(fail('TRANSPORT_CLOSED', 'Router stopped'))
+      cancel(fail('TRANSPORT_CLOSED', 'ルーターが停止しました'))
     for (const pending of this.pending.values())
-      pending.reject(fail('TRANSPORT_CLOSED', 'Router stopped'))
+      pending.reject(fail('TRANSPORT_CLOSED', 'ルーターが停止しました'))
     this.pending.clear()
     for (const cleanup of this.cleanups) cleanup()
     this.cleanups.clear()

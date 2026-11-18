@@ -33,7 +33,7 @@ export async function call(
   ...args: unknown[]
 ): Promise<unknown> {
   const method = nativeMethod(...path)
-  if (!method) fail('UNSUPPORTED_OPERATION', `Missing ${path.join('.')}`)
+  if (!method) fail('UNSUPPORTED_OPERATION', `${path.join('.')} がありません`)
   try {
     return await method(...args)
   } catch (cause) {
@@ -43,7 +43,7 @@ export async function call(
 export function root(): URL {
   const base = parseUrl(nativeMethod('runtime', 'getURL')?.(''))
   if (!base || !isExtensionUrl(base, base))
-    fail('CONTEXT_UNAVAILABLE', 'Extension runtime is unavailable')
+    fail('CONTEXT_UNAVAILABLE', '拡張機能のランタイムを使えません')
   return base
 }
 export function page(value: unknown): string {
@@ -59,14 +59,14 @@ export function page(value: unknown): string {
   if (!url || !isExtensionUrl(url, base) || url.searchParams.has(POPOUT_PARAM))
     fail(
       'INVALID_ARGUMENT',
-      'Specify an extension page without reserved query parameters'
+      '予約済みのクエリパラメーターを含まない拡張機能のページを指定してください'
     )
   url.search = url.searchParams.toString()
   return url.href
 }
 export function id(value: unknown): asserts value is number {
   if (!validId(value))
-    fail('INVALID_ARGUMENT', 'Expected a nonnegative integer ID')
+    fail('INVALID_ARGUMENT', 'ID には 0 以上の整数を指定してください')
 }
 export function options(value: unknown): PopoutOptions {
   const v = object(value)
@@ -90,7 +90,7 @@ export function options(value: unknown): PopoutOptions {
         ].includes(k)
     )
   )
-    fail('INVALID_ARGUMENT', 'Invalid popout options')
+    fail('INVALID_ARGUMENT', 'popout のオプションが不正です')
   for (const k of ['width', 'height', 'left', 'top'] as const) {
     const n = v[k]
     if (
@@ -99,11 +99,11 @@ export function options(value: unknown): PopoutOptions {
         !Number.isSafeInteger(n) ||
         ((k === 'width' || k === 'height') && n <= 0))
     )
-      fail('INVALID_ARGUMENT', `Invalid ${k}`)
+      fail('INVALID_ARGUMENT', `${k} が不正です`)
   }
   for (const k of ['focused', 'closeOriginal'])
     if (v[k] !== undefined && typeof v[k] !== 'boolean')
-      fail('INVALID_ARGUMENT', `Invalid ${k}`)
+      fail('INVALID_ARGUMENT', `${k} が不正です`)
   if (v.associatedTabId !== undefined) id(v.associatedTabId)
   if (
     v.reuseKey !== undefined &&
@@ -111,14 +111,14 @@ export function options(value: unknown): PopoutOptions {
       !v.reuseKey.trim() ||
       v.reuseKey.length > 256)
   )
-    fail('INVALID_ARGUMENT', 'Invalid reuseKey')
+    fail('INVALID_ARGUMENT', 'reuseKey が不正です')
   if (
     v.source === 'side-panel' &&
     (v.sourceTarget !== undefined || v.closeOriginal !== undefined)
   )
     fail(
       'INVALID_ARGUMENT',
-      'sourceTarget and closeOriginal are only available for source: popup'
+      'sourceTarget と closeOriginal は source: popup でのみ使えます'
     )
   const target = object(v.sourceTarget)
   if (v.sourceTarget !== undefined) {
@@ -127,7 +127,10 @@ export function options(value: unknown): PopoutOptions {
       Object.keys(target).length !== 1 ||
       !['tabId', 'windowId'].includes(Object.keys(target)[0] ?? '')
     )
-      fail('INVALID_ARGUMENT', 'Specify one sourceTarget ID')
+      fail(
+        'INVALID_ARGUMENT',
+        'sourceTarget には ID を 1 つだけ指定してください'
+      )
     id(target.tabId ?? target.windowId)
   }
   return {

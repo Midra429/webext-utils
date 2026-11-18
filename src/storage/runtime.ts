@@ -31,7 +31,7 @@ type Subscription = {
 }
 function area(value: unknown): asserts value is StorageArea {
   if (!['local', 'sync', 'session'].includes(String(value)))
-    throw fail('INVALID_ARGUMENT', 'Invalid storage area')
+    throw fail('INVALID_ARGUMENT', 'ストレージ領域が不正です')
 }
 export function parseRequest(value: unknown): {
   area: StorageArea
@@ -46,20 +46,20 @@ export function parseRequest(value: unknown): {
       (k) => !['area', 'operation', 'keys', 'values'].includes(k)
     )
   )
-    throw fail('INVALID_ARGUMENT', 'Invalid storage request')
+    throw fail('INVALID_ARGUMENT', 'ストレージの要求が不正です')
   area(v.area)
   if (!['get', 'set', 'remove'].includes(String(v.operation)))
-    throw fail('ACCESS_DENIED', 'Storage operation is not allowed')
+    throw fail('ACCESS_DENIED', 'このストレージ操作は許可されていません')
   const names = keys(v.keys)
   const values = v.values === undefined ? {} : object(v.values)
   if (!values || (v.operation !== 'set' && Object.keys(values).length))
-    throw fail('INVALID_ARGUMENT', 'Invalid storage values')
+    throw fail('INVALID_ARGUMENT', 'ストレージの値が不正です')
   if (
     v.operation === 'set' &&
     (Object.keys(values).length !== names.length ||
       names.some((k) => !Object.hasOwn(values, k)))
   )
-    throw fail('INVALID_ARGUMENT', 'Storage keys and values differ')
+    throw fail('INVALID_ARGUMENT', 'ストレージのキーと値が対応していません')
   assertJson(values, 'storage')
   return {
     area: v.area,
@@ -86,10 +86,13 @@ export class StorageRuntime {
   mode(): 'direct' | 'rpc' {
     const context = this.env.context.get()
     if (context.kind === 'unknown')
-      throw fail('CONTEXT_UNAVAILABLE', 'Storage context is unavailable')
+      throw fail('CONTEXT_UNAVAILABLE', 'storage の実行場所を特定できません')
     if (context.kind === 'content-script') {
       if (context.world === 'MAIN')
-        throw fail('ACCESS_DENIED', 'MAIN storage requires a bridge')
+        throw fail(
+          'ACCESS_DENIED',
+          'MAIN world の storage にはブリッジが必要です'
+        )
       return 'rpc'
     }
     return 'direct'
@@ -224,14 +227,14 @@ export class StorageRuntime {
           sender.trust !== 'extension' ||
           !Array.isArray(value)
         )
-          throw fail('ACCESS_DENIED', 'Invalid storage event sender')
+          throw fail('ACCESS_DENIED', 'ストレージイベントの送信元が不正です')
         const valid: Change[] = []
         for (const c of value) {
           const v = object(c)
-          if (!v) throw fail('VALIDATION_ERROR', 'Invalid storage event')
+          if (!v) throw fail('VALIDATION_ERROR', 'ストレージイベントが不正です')
           key(v.key)
           if (!matches(v as Change))
-            throw fail('ACCESS_DENIED', 'Storage event outside subscription')
+            throw fail('ACCESS_DENIED', '購読範囲外のストレージイベントです')
           valid.push(v as Change)
         }
         if (active) callback(valid)
@@ -305,7 +308,7 @@ export class StorageRuntime {
     if (!locks)
       throw fail(
         'UNSUPPORTED_OPERATION',
-        'Storage subscriptions require Web Locks'
+        'ストレージの購読には Web Locks が必要です'
       )
     return await locks.request(SUBSCRIPTIONS, work)
   }
@@ -355,10 +358,13 @@ export class StorageRuntime {
     if (this.env.context.get().kind !== 'background')
       throw fail(
         'CONTEXT_UNAVAILABLE',
-        'Storage Background registration requires Background'
+        'storage の Background 登録は Background で行ってください'
       )
     if (this.started)
-      throw fail('INVALID_ARGUMENT', 'Storage Background already registered')
+      throw fail(
+        'INVALID_ARGUMENT',
+        'storage の Background はすでに登録されています'
+      )
     const access = {
       local: true,
       sync: true,
@@ -371,12 +377,12 @@ export class StorageRuntime {
           !['local', 'sync', 'session'].includes(k) || typeof v !== 'boolean'
       )
     )
-      throw fail('INVALID_ARGUMENT', 'Invalid contentScriptAccess')
+      throw fail('INVALID_ARGUMENT', 'contentScriptAccess が不正です')
     const own = (sender: MessageSender) => {
       if (sender.trust !== 'extension' || sender.context !== 'content-script')
         throw fail(
           'ACCESS_DENIED',
-          'Storage RPC requires an extension Content Script'
+          'storage の RPC はこの拡張機能の Content Script からのみ使えます'
         )
     }
     const targetFor = (
@@ -399,7 +405,7 @@ export class StorageRuntime {
         const v = object(value)
         if (v?.operation === 'unsubscribe') {
           if (typeof v.id !== 'string')
-            throw fail('INVALID_ARGUMENT', 'Invalid subscription ID')
+            throw fail('INVALID_ARGUMENT', '購読 ID が不正です')
           await this.subscriptions((saved) => {
             const s = saved[v.id as string]
             if (
@@ -417,7 +423,7 @@ export class StorageRuntime {
         if (!access[v.area as StorageArea])
           throw fail(
             'ACCESS_DENIED',
-            'Content Script access to storage area is disabled'
+            'このストレージ領域への Content Script からのアクセスは無効です'
           )
         if (v.operation === 'subscribe') {
           if (
@@ -439,11 +445,14 @@ export class StorageRuntime {
             typeof v.instanceId !== 'string' ||
             typeof v.prefix !== 'string'
           )
-            throw fail('INVALID_ARGUMENT', 'Invalid storage subscription')
+            throw fail('INVALID_ARGUMENT', 'ストレージの購読内容が不正です')
           if (v.prefix) segments(v.prefix)
           const selected = v.keys === undefined ? undefined : keys(v.keys)
           if (selected?.some((k) => !within(k, v.prefix as string)))
-            throw fail('INVALID_ARGUMENT', 'Subscription outside namespace')
+            throw fail(
+              'INVALID_ARGUMENT',
+              '購読するキーが namespace の外にあります'
+            )
           if (Object.keys(await this.subscriptions()).length >= 1024)
             await this.prune()
           await this.subscriptions((saved) => {
@@ -451,7 +460,7 @@ export class StorageRuntime {
               Object.keys(saved).length >= 1024 &&
               !Object.hasOwn(saved, v.id as string)
             )
-              throw fail('QUOTA_EXCEEDED', 'Too many storage subscriptions')
+              throw fail('QUOTA_EXCEEDED', 'ストレージの購読が多すぎます')
             saved[v.id as string] = {
               area: v.area as StorageArea,
               prefix: v.prefix as string,

@@ -76,17 +76,23 @@ export class MessageHub {
   pageHub(): MessageHub {
     const context = this.env.context.get()
     if (context.kind !== 'content-script' || context.world !== 'ISOLATED')
-      throw fail('CONTEXT_UNAVAILABLE', 'Page bridges require ISOLATED context')
+      throw fail(
+        'CONTEXT_UNAVAILABLE',
+        'ブリッジは ISOLATED world の Content Script でのみ設置できます'
+      )
     return new MessageHub(this.env, true)
   }
 
   startBackground(): Unsubscribe {
     if (this.router)
-      throw fail('INVALID_ARGUMENT', 'Background router already started')
+      throw fail(
+        'INVALID_ARGUMENT',
+        'Background のルーターはすでに起動しています'
+      )
     if (this.env.context.get().kind !== 'background')
       throw fail(
         'CONTEXT_UNAVAILABLE',
-        'startBackground requires Background context'
+        'startBackground() は Background で呼び出してください'
       )
     const router = new Router(
       this.env,
@@ -113,7 +119,7 @@ export class MessageHub {
         this.router = undefined
         router.stop()
         for (const cancel of this.pendingConnections)
-          cancel(fail('TRANSPORT_CLOSED', 'Router stopped'))
+          cancel(fail('TRANSPORT_CLOSED', 'ルーターが停止しました'))
       }
     }
   }
@@ -125,17 +131,20 @@ export class MessageHub {
   ): Unsubscribe {
     name(key, internal)
     if (typeof handler !== 'function')
-      throw fail('INVALID_ARGUMENT', 'Handler must be a function')
+      throw fail('INVALID_ARGUMENT', 'ハンドラーには関数を指定してください')
     if (this.handlers.has(key))
-      throw fail('INVALID_ARGUMENT', 'Handler already registered in this realm')
+      throw fail(
+        'INVALID_ARGUMENT',
+        'この実行環境では、このメッセージ名のハンドラーがすでに登録されています'
+      )
     const context = this.env.context.get()
     if (context.kind === 'unknown')
       throw fail(
         'CONTEXT_UNAVAILABLE',
-        'Cannot register handler in unknown context'
+        '実行場所を特定できないため、ハンドラーを登録できません'
       )
     if (context.kind === 'content-script' && context.world === 'MAIN')
-      throw fail('UNSUPPORTED_OPERATION', 'MAIN requires a bridge')
+      throw fail('UNSUPPORTED_OPERATION', 'MAIN world ではブリッジが必要です')
     this.instanceId ||= crypto.randomUUID()
     const registration = {
       owner,
@@ -156,7 +165,7 @@ export class MessageHub {
       active = false
       if (this.handlers.get(key) === registration) {
         for (const cancel of registration.pending)
-          cancel(fail('TRANSPORT_CLOSED', 'Subscription removed'))
+          cancel(fail('TRANSPORT_CLOSED', 'ハンドラーの登録が解除されました'))
         this.handlers.delete(key)
         this.schedule()
       }
@@ -167,7 +176,7 @@ export class MessageHub {
     for (const [key, registration] of this.handlers)
       if (registration.owner === owner) {
         for (const cancel of registration.pending)
-          cancel(fail('TRANSPORT_CLOSED', 'Receiver disposed'))
+          cancel(fail('TRANSPORT_CLOSED', '受信側が破棄されました'))
         this.handlers.delete(key)
         changed = true
       }
@@ -194,7 +203,7 @@ export class MessageHub {
   }
   async ready(until = Date.now() + DEFAULT_TIMEOUT): Promise<void> {
     if (this.env.context.get().kind === 'unknown')
-      throw fail('CONTEXT_UNAVAILABLE', 'Messaging context unavailable')
+      throw fail('CONTEXT_UNAVAILABLE', 'messaging の実行場所を特定できません')
     try {
       let snapshot: Promise<void>
       do {
@@ -210,7 +219,10 @@ export class MessageHub {
       this.env.context.get().kind === 'background' &&
       !this.router
     )
-      throw fail('ROUTER_UNAVAILABLE', 'Background router not started')
+      throw fail(
+        'ROUTER_UNAVAILABLE',
+        'Background のルーターが起動していません'
+      )
     if (
       this.registrationError ||
       (this.handlers.size && !this.router && !this.connection)
@@ -257,7 +269,7 @@ export class MessageHub {
               typeof v.deadline !== 'number' ||
               v.deadline <= Date.now()
             )
-              throw fail('VALIDATION_ERROR', 'Invalid reconnect control')
+              throw fail('VALIDATION_ERROR', '再接続の制御メッセージが不正です')
             await this.ready(v.deadline)
             respond(success(id, undefined))
           } catch (error) {
@@ -271,7 +283,8 @@ export class MessageHub {
   private connect(): Port {
     if (this.connection) return this.connection
     const connect = this.env.method('runtime', 'connect')
-    if (!connect) throw fail('CONTEXT_UNAVAILABLE', 'No runtime.connect')
+    if (!connect)
+      throw fail('CONTEXT_UNAVAILABLE', 'runtime.connect がありません')
     const p = port(connect({ name: PORT }))
     this.connection = p
     this.removePort = observe(
@@ -287,11 +300,11 @@ export class MessageHub {
         this.connection = undefined
         for (const pending of this.controls.values())
           pending.reject(
-            fail('TRANSPORT_CLOSED', 'Registration port disconnected')
+            fail('TRANSPORT_CLOSED', '登録用の Port が切断されました')
           )
         this.controls.clear()
         for (const cancel of this.pendingConnections)
-          cancel(fail('TRANSPORT_CLOSED', 'Receiver port disconnected'))
+          cancel(fail('TRANSPORT_CLOSED', '受信用の Port が切断されました'))
         // Keep only the passive reconnect listener. No idle retries or heartbeat.
       }
     )
@@ -316,7 +329,7 @@ export class MessageHub {
         v.instanceId !== this.instanceId ||
         this.connection !== p
       )
-        throw fail('VALIDATION_ERROR', 'Invalid delivery')
+        throw fail('VALIDATION_ERROR', '配信メッセージが不正です')
       const r = request(v.request)
       const from = object(v.sender)
       if (
@@ -327,10 +340,13 @@ export class MessageHub {
           String(from.context)
         )
       )
-        throw fail('VALIDATION_ERROR', 'Invalid native sender metadata')
+        throw fail('VALIDATION_ERROR', 'ブラウザの送信元情報が不正です')
       const response = await this.dispatch(r, from as unknown as MessageSender)
       if (!response.ok && response.error.code === 'NO_RECEIVER')
-        throw fail('TRANSPORT_CLOSED', 'Selected subscription was removed')
+        throw fail(
+          'TRANSPORT_CLOSED',
+          '選択した受信ハンドラーは解除されています'
+        )
       const result = reply(response, r.id)
       if (this.connection === p && r.deadline > Date.now())
         p.postMessage(success(id, result))
@@ -365,9 +381,9 @@ export class MessageHub {
     if (!this.endpoint) {
       const info = await deadline(this.env.context.resolve(), until)
       if (info.kind === 'unknown' || info.kind === 'background')
-        throw fail('CONTEXT_UNAVAILABLE', 'Cannot identify receiving context')
+        throw fail('CONTEXT_UNAVAILABLE', '受信側の実行場所を特定できません')
       if (info.kind === 'content-script' && info.world === 'MAIN')
-        throw fail('UNSUPPORTED_OPERATION', 'MAIN requires a bridge')
+        throw fail('UNSUPPORTED_OPERATION', 'MAIN world ではブリッジが必要です')
       this.endpoint = {
         instanceId: this.instanceId,
         generation: 0,
@@ -442,14 +458,16 @@ export class MessageHub {
   async internalInstance(): Promise<string> {
     await this.ready()
     if (!this.endpoint)
-      throw fail('CONTEXT_UNAVAILABLE', 'No receiving endpoint')
+      throw fail('CONTEXT_UNAVAILABLE', '受信用のエンドポイントがありません')
     return this.instanceId
   }
   async dispatch(r: Request, from: MessageSender): Promise<Reply> {
     try {
-      if (r.deadline <= Date.now()) throw fail('TIMEOUT', 'Request expired')
+      if (r.deadline <= Date.now())
+        throw fail('TIMEOUT', '要求の期限が切れました')
       const registered = this.handlers.get(r.name)
-      if (!registered) throw fail('NO_RECEIVER', 'No handler registered')
+      if (!registered)
+        throw fail('NO_RECEIVER', 'ハンドラーが登録されていません')
       const invoke = async () => {
         try {
           return await registered.handler(r.data, from, r)
@@ -462,7 +480,7 @@ export class MessageHub {
           throw new WebextError(
             'HANDLER_ERROR',
             'messaging.handler',
-            'Message handler failed',
+            '受信ハンドラーで例外が発生しました',
             { cause }
           )
         }
@@ -474,7 +492,7 @@ export class MessageHub {
         registered.pending
       )
       if (r.mode !== 'send' && value !== undefined)
-        throw fail('HANDLER_ERROR', 'Notification handler must return no value')
+        throw fail('HANDLER_ERROR', '通知の受信ハンドラーは値を返せません')
       return success(r.id, value)
     } catch (error) {
       return failure(r.id, error)
@@ -495,21 +513,27 @@ export class MessageHub {
     if (!Number.isFinite(timeout) || timeout <= 0 || timeout > 2147483647)
       throw fail(
         'INVALID_ARGUMENT',
-        'timeoutMs must be a positive finite timer duration'
+        'timeoutMs にはタイマーで使える正の有限値を指定してください'
       )
     if (
       options.ignoreMissing !== undefined &&
       typeof options.ignoreMissing !== 'boolean'
     )
-      throw fail('INVALID_ARGUMENT', 'ignoreMissing must be boolean')
+      throw fail(
+        'INVALID_ARGUMENT',
+        'ignoreMissing には真偽値を指定してください'
+      )
     if (mode === 'all' && !options.target)
-      throw fail('INVALID_ARGUMENT', 'notifyAll requires explicit target')
+      throw fail(
+        'INVALID_ARGUMENT',
+        'notifyAll() では target を明示してください'
+      )
     const to = target(options.target ?? { context: 'background' })
     const context = this.env.context.get()
     if (context.kind === 'unknown')
-      throw fail('CONTEXT_UNAVAILABLE', 'Messaging context unavailable')
+      throw fail('CONTEXT_UNAVAILABLE', 'messaging の実行場所を特定できません')
     if (context.kind === 'content-script' && context.world === 'MAIN')
-      throw fail('UNSUPPORTED_OPERATION', 'MAIN requires a bridge')
+      throw fail('UNSUPPORTED_OPERATION', 'MAIN world ではブリッジが必要です')
     const r: Request = {
       ...wire('request'),
       type: 'request',
@@ -526,20 +550,29 @@ export class MessageHub {
       if (this.router)
         return reply(await this.router.route(r, this.env.ownSender()), r.id)
       if (context.kind === 'background')
-        throw fail('ROUTER_UNAVAILABLE', 'Background router not started')
+        throw fail(
+          'ROUTER_UNAVAILABLE',
+          'Background のルーターが起動していません'
+        )
       const send = this.env.method('runtime', 'sendMessage')
       if (!send)
-        throw fail('CONTEXT_UNAVAILABLE', 'runtime.sendMessage unavailable')
+        throw fail('CONTEXT_UNAVAILABLE', 'runtime.sendMessage を使えません')
       let result: unknown
       try {
         result = await send(r)
       } catch (cause) {
         if (isMissing(cause))
-          throw fail('ROUTER_UNAVAILABLE', 'Background router is not listening')
+          throw fail(
+            'ROUTER_UNAVAILABLE',
+            'Background のルーターが待ち受けていません'
+          )
         throw nativeError('runtime.sendMessage', cause)
       }
       if (result === undefined)
-        throw fail('ROUTER_UNAVAILABLE', 'Background router is not listening')
+        throw fail(
+          'ROUTER_UNAVAILABLE',
+          'Background のルーターが待ち受けていません'
+        )
       return reply(result, r.id)
     }
     try {

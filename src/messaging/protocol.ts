@@ -52,7 +52,7 @@ export function envelope(value: unknown): Record<string, unknown> | undefined {
   if (v?.protocol !== PROTOCOL) return
   assertJson(value)
   if (v.version !== 1 || typeof v.type !== 'string')
-    throw fail('VALIDATION_ERROR', 'Unsupported messaging protocol')
+    throw fail('VALIDATION_ERROR', '対応していない messaging プロトコルです')
   return v
 }
 export function name(
@@ -65,7 +65,7 @@ export function name(
     value.length > 256 ||
     (value.startsWith('__webext_utils') && !internal)
   )
-    throw fail('INVALID_ARGUMENT', 'Invalid message name')
+    throw fail('INVALID_ARGUMENT', 'メッセージ名が不正です')
 }
 const views = new Set([
   'popup',
@@ -77,7 +77,7 @@ const views = new Set([
 ])
 export function target(value: unknown): MessageTarget {
   const v = object(value)
-  if (!v) throw fail('INVALID_ARGUMENT', 'Missing target')
+  if (!v) throw fail('INVALID_ARGUMENT', '宛先が指定されていません')
   const allowed = new Set(['context'])
   if (v.context === 'content-script') {
     for (const k of ['tabId', 'frameId', 'world', 'documentId', 'instanceId'])
@@ -86,22 +86,25 @@ export function target(value: unknown): MessageTarget {
       !validId(v.tabId) ||
       (v.world !== undefined && v.world !== 'ISOLATED' && v.world !== 'MAIN')
     )
-      throw fail('INVALID_ARGUMENT', 'Invalid content-script target')
+      throw fail('INVALID_ARGUMENT', 'Content Script の宛先が不正です')
   } else if (typeof v.context === 'string' && views.has(v.context)) {
     for (const k of ['tabId', 'windowId', 'documentId', 'instanceId'])
       allowed.add(k)
   } else if (v.context !== 'background')
-    throw fail('INVALID_ARGUMENT', 'Unknown target context')
+    throw fail('INVALID_ARGUMENT', '宛先の実行場所が不明です')
   for (const [key, val] of Object.entries(v)) {
     if (!allowed.has(key))
-      throw fail('INVALID_ARGUMENT', `Incompatible target field: ${key}`)
+      throw fail(
+        'INVALID_ARGUMENT',
+        `この宛先では使えないフィールドです: ${key}`
+      )
     if (['tabId', 'frameId', 'windowId'].includes(key) && !validId(val))
-      throw fail('INVALID_ARGUMENT', `Invalid ${key}`)
+      throw fail('INVALID_ARGUMENT', `${key} が不正です`)
     if (
       ['documentId', 'instanceId'].includes(key) &&
       (typeof val !== 'string' || !val.length)
     )
-      throw fail('INVALID_ARGUMENT', `Invalid ${key}`)
+      throw fail('INVALID_ARGUMENT', `${key} が不正です`)
   }
   return v as unknown as MessageTarget
 }
@@ -119,7 +122,7 @@ export function request(value: unknown): Request {
     (v.page !== undefined && typeof v.page !== 'boolean') ||
     !['send', 'notify', 'all'].includes(String(v.mode))
   )
-    throw fail('VALIDATION_ERROR', 'Invalid request')
+    throw fail('VALIDATION_ERROR', '要求の形式が不正です')
   name(v.name, true)
   target(v.target)
   return v as unknown as Request
@@ -168,17 +171,17 @@ const codes = new Set<ErrorCode>([
 export function reply(value: unknown, id: string): unknown {
   const v = envelope(value)
   if (!v || v.type !== 'reply' || v.id !== id || typeof v.ok !== 'boolean')
-    throw fail('VALIDATION_ERROR', 'Invalid response envelope')
+    throw fail('VALIDATION_ERROR', '応答の形式が不正です')
   if (v.ok) return v.value
   const e = object(v.error)
   if (!e || !codes.has(e.code as ErrorCode) || typeof e.message !== 'string')
-    throw fail('VALIDATION_ERROR', 'Invalid response error')
+    throw fail('VALIDATION_ERROR', '応答のエラー情報が不正です')
   throw fail(e.code as ErrorCode, e.message)
 }
 export function sender(value: unknown, extensionId: unknown): MessageSender {
   const v = object(value)
   if (!v || typeof v.id !== 'string' || v.id !== extensionId)
-    throw fail('ACCESS_DENIED', 'Sender is not this extension')
+    throw fail('ACCESS_DENIED', '送信元がこの拡張機能ではありません')
   const tab = object(v.tab)
   return {
     id: String(v.id),
@@ -214,7 +217,7 @@ export async function deadline<T>(
         cancel = reject
         for (const group of cancellations) group.add(cancel)
         timer = setTimeout(
-          () => reject(fail('TIMEOUT', 'Messaging deadline exceeded')),
+          () => reject(fail('TIMEOUT', 'messaging の応答期限を過ぎました')),
           Math.max(0, until - Date.now())
         )
       }),

@@ -44,13 +44,13 @@ function handle(
 ): PopoutHandle {
   const associated = () => {
     if (record.associatedTabId === undefined)
-      fail('CONTEXT_UNAVAILABLE', 'Popout has no associated tab')
+      fail('CONTEXT_UNAVAILABLE', 'popout に関連付けられたタブがありません')
     return record.associatedTabId
   }
   const getTab = async (): Promise<PopoutTab> => {
     const tab = object(await call(['tabs', 'get'], associated()))
     if (!tab || tab.id !== record.associatedTabId || !validId(tab.windowId))
-      fail('NATIVE_ERROR', 'Invalid native tab')
+      fail('NATIVE_ERROR', 'ブラウザから取得したタブが不正です')
     return Object.freeze({ ...tab }) as unknown as PopoutTab
   }
   return Object.freeze({
@@ -108,7 +108,7 @@ function handle(
         (v.documentId !== undefined &&
           (typeof v.documentId !== 'string' || !v.documentId))
       )
-        fail('INVALID_ARGUMENT', 'Invalid message target options')
+        fail('INVALID_ARGUMENT', 'メッセージの宛先オプションが不正です')
       if (v.frameId !== undefined) id(v.frameId)
       return {
         context: 'content-script' as const,
@@ -172,7 +172,7 @@ async function open(value: PopoutOptions): Promise<PopoutHandle> {
     }
   }
   const record = await request('open', opts)
-  if (!record) fail('NATIVE_ERROR', 'Popout creation returned no record')
+  if (!record) fail('NATIVE_ERROR', 'popout の作成結果を取得できません')
   return handle(
     record,
     originalFailure ?? (opts.closeOriginal ? closeOriginal(context) : undefined)

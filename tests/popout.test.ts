@@ -251,7 +251,7 @@ describe('popout', () => {
       await expect(h.getTab()).rejects.toMatchObject({
         code: 'CONTEXT_UNAVAILABLE',
       })
-      expect(() => h.messageTarget()).toThrow('no associated tab')
+      expect(() => h.messageTarget()).toThrow('関連付けられたタブがありません')
     })
   }
   test('simultaneous reuse is serialized, incompatible key fails and unkeyed opens multiply', async () => {
@@ -656,7 +656,7 @@ describe('popout', () => {
       value: { ok: true, value: { status: 'ready' } },
     })
     expect(f.onRemoved.callbacks.size).toBe(1)
-    expect(() => f.manager.startBackground()).toThrow('already registered')
+    expect(() => f.manager.startBackground()).toThrow('すでに登録されています')
     const windowId = [...f.windows.keys()][0]!
     f.windows.delete(windowId)
     for (const cb of f.onRemoved.callbacks) cb(windowId)

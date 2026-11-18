@@ -5,7 +5,7 @@ import { fail } from '../protocol'
 export const PAGE_PROTOCOL = '@midra/webext-utils/page'
 export function channel(value: unknown): asserts value is string {
   if (typeof value !== 'string' || !value.length || value.length > 128)
-    throw fail('INVALID_ARGUMENT', 'Invalid page channel')
+    throw fail('INVALID_ARGUMENT', 'ページのチャネル名が不正です')
 }
 export function eventName(channel: string, incoming: boolean): string {
   return `${PAGE_PROTOCOL}/1/${channel}/${incoming ? 'from-page' : 'to-page'}`
@@ -23,7 +23,10 @@ function rejectUnsafeKeys(value: unknown): void {
     if (!item || typeof item !== 'object') continue
     for (const key of Object.keys(item)) {
       if (UNSAFE_KEYS.has(key))
-        throw fail('VALIDATION_ERROR', 'Unsafe page object key')
+        throw fail(
+          'VALIDATION_ERROR',
+          'ページのオブジェクトに安全でないキーが含まれています'
+        )
       stack.push((item as Record<string, unknown>)[key])
     }
   }
@@ -45,7 +48,7 @@ export function encode(value: unknown): string {
  */
 export function decode(raw: unknown): Record<string, unknown> {
   if (typeof raw !== 'string')
-    throw fail('VALIDATION_ERROR', 'Invalid page event detail')
+    throw fail('VALIDATION_ERROR', 'ページイベントの detail が不正です')
   const value: unknown = JSON.parse(raw)
   rejectUnsafeKeys(value)
   const v = object(value)
@@ -61,7 +64,7 @@ export function decode(raw: unknown): Record<string, unknown> {
     !v.session.length ||
     v.session.length > 128
   )
-    throw fail('VALIDATION_ERROR', 'Invalid page envelope')
+    throw fail('VALIDATION_ERROR', 'ページのメッセージ形式が不正です')
   const fields: Record<string, string[]> = {
     hello: ['names'],
     ready: [],
@@ -72,7 +75,7 @@ export function decode(raw: unknown): Record<string, unknown> {
     'service-event': ['name', 'data'],
   }
   const extra = typeof v.type === 'string' ? fields[v.type] : undefined
-  if (!extra) throw fail('VALIDATION_ERROR', 'Invalid page command')
+  if (!extra) throw fail('VALIDATION_ERROR', 'ページのコマンドが不正です')
   const allowed = [
     'protocol',
     'version',
@@ -83,7 +86,10 @@ export function decode(raw: unknown): Record<string, unknown> {
     ...extra,
   ]
   if (Object.keys(v).some((key) => !allowed.includes(key)))
-    throw fail('VALIDATION_ERROR', 'Unknown page field')
+    throw fail(
+      'VALIDATION_ERROR',
+      'ページのメッセージに不明なフィールドがあります'
+    )
   return v
 }
 

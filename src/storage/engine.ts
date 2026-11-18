@@ -49,7 +49,7 @@ export class StorageEngine {
     if (!fn)
       throw fail(
         area === 'session' ? 'UNSUPPORTED_OPERATION' : 'PERMISSION_DENIED',
-        `Storage ${area}.${method} is unavailable`
+        `storage.${area}.${method} を使えません`
       )
     try {
       return await fn(...args)
@@ -62,7 +62,7 @@ export class StorageEngine {
           : permission.test(message)
             ? 'PERMISSION_DENIED'
             : 'NATIVE_ERROR',
-        `Storage ${area}.${method} failed`,
+        `storage.${area}.${method} が失敗しました`,
         cause
       )
     }
@@ -72,7 +72,8 @@ export class StorageEngine {
     names: string[] | null
   ): Promise<Record<string, unknown>> {
     const value = object(await this.call(area, 'get', names))
-    if (!value) throw fail('NATIVE_ERROR', 'Invalid native storage response')
+    if (!value)
+      throw fail('NATIVE_ERROR', 'ブラウザのストレージの応答が不正です')
     // Native storage returns ordinary objects; absent keys must not resolve to
     // Object.prototype members such as toString or valueOf.
     return Object.assign(Object.create(null), value)
@@ -85,13 +86,13 @@ export class StorageEngine {
     if (!external && this.migrating.has(area))
       throw fail(
         'MIGRATION_FAILED',
-        'Public storage reentry during a migration is forbidden'
+        '移行ステップの中から公開 API でストレージを操作することはできません'
       )
     const locks = this.locks()
     if (!locks || typeof locks.request !== 'function')
       throw fail(
         'UNSUPPORTED_OPERATION',
-        'Storage coordination requires Web Locks'
+        'ストレージの排他制御には Web Locks が必要です'
       )
     let entered = false
     try {
@@ -107,7 +108,7 @@ export class StorageEngine {
       if (cause instanceof WebextError) throw cause
       throw fail(
         entered ? 'NATIVE_ERROR' : 'UNSUPPORTED_OPERATION',
-        'Storage Web Lock failed',
+        'ストレージの Web Locks による排他制御に失敗しました',
         cause
       )
     }
@@ -134,7 +135,7 @@ export class StorageEngine {
           (n as number) < 0
       )
     )
-      throw fail('MIGRATION_CONFLICT', 'Invalid storage version metadata')
+      throw fail('MIGRATION_CONFLICT', 'ストレージのバージョン情報が不正です')
     return Object.assign(Object.create(null), v) as Versions
   }
   private journalLocation(area: StorageArea): [StorageArea, string] {
@@ -155,17 +156,18 @@ export class StorageEngine {
       (j.to as number) <= (j.from as number) ||
       !Array.isArray(j.entries)
     )
-      throw fail('MIGRATION_CONFLICT', 'Invalid storage migration journal')
+      throw fail('MIGRATION_CONFLICT', 'ストレージの移行ジャーナルが不正です')
     const journal = j as unknown as Journal
     if (journal.prefix) segments(journal.prefix)
     const seen = new Set<string>()
     for (const e of journal.entries) {
-      if (!object(e)) throw fail('MIGRATION_CONFLICT', 'Invalid journal entry')
+      if (!object(e))
+        throw fail('MIGRATION_CONFLICT', 'ジャーナルの項目が不正です')
       key(e.key)
       if (!within(e.key, journal.prefix) || seen.has(e.key))
         throw fail(
           'MIGRATION_CONFLICT',
-          'Journal key outside migration namespace'
+          'ジャーナルに移行対象の namespace 外のキーがあります'
         )
       seen.add(e.key)
       if (Object.hasOwn(e, 'before')) clone(e.before)
@@ -174,7 +176,10 @@ export class StorageEngine {
     const versions = await this.versions(area)
     const version = versions[journal.prefix] ?? 0
     if (version !== journal.from && version !== journal.to)
-      throw fail('MIGRATION_CONFLICT', 'Migration version changed externally')
+      throw fail(
+        'MIGRATION_CONFLICT',
+        '移行中にバージョンが外部から変更されました'
+      )
     const current = await this.read(area, [...seen])
     for (const e of journal.entries) {
       if (
@@ -183,7 +188,7 @@ export class StorageEngine {
       )
         throw fail(
           'MIGRATION_CONFLICT',
-          `Migration data changed externally: ${e.key}`
+          `移行中にデータが外部から変更されました: ${e.key}`
         )
     }
     if (version !== journal.to) {
@@ -199,7 +204,10 @@ export class StorageEngine {
       if (removed.length) await this.call(area, 'remove', removed)
       const verify = await this.read(area, [...seen])
       if (journal.entries.some((e) => !equal(verify[e.key], e.after)))
-        throw fail('MIGRATION_CONFLICT', 'Migration readback failed')
+        throw fail(
+          'MIGRATION_CONFLICT',
+          '移行後に読み戻した値が書き込んだ値と一致しません'
+        )
       // Sync and direct native writers do not participate in our lock. Re-read
       // metadata before committing so an observed remote version is never lost.
       const finalVersions = await this.versions(area)
@@ -207,7 +215,7 @@ export class StorageEngine {
       if (finalVersion !== journal.from && finalVersion !== journal.to)
         throw fail(
           'MIGRATION_CONFLICT',
-          'Migration version changed before commit'
+          '移行を確定する前にバージョンが変更されました'
         )
       finalVersions[journal.prefix] = journal.to
       await this.call(area, 'set', { [META]: finalVersions })
@@ -225,11 +233,11 @@ export class StorageEngine {
       plan.version < 0 ||
       !object(plan.steps)
     )
-      throw fail('INVALID_ARGUMENT', 'Invalid migration plan')
+      throw fail('INVALID_ARGUMENT', '移行計画が不正です')
     if (area === 'sync' && plan.allowNonAtomicSync !== true)
       throw fail(
         'UNSUPPORTED_OPERATION',
-        'Sync migration requires allowNonAtomicSync: true'
+        'sync 領域の移行には allowNonAtomicSync: true が必要です'
       )
     const steps = { ...plan.steps },
       target = plan.version
@@ -243,16 +251,16 @@ export class StorageEngine {
             within(registered, prefix) ||
             within(prefix, registered))
         )
-          throw fail('INVALID_ARGUMENT', 'Overlapping migration namespaces')
+          throw fail('INVALID_ARGUMENT', '移行の namespace が重複しています')
       const from = versions[prefix] ?? 0
       if (from > target)
         throw fail(
           'SCHEMA_TOO_NEW',
-          'Stored schema is newer than this migration plan'
+          '保存済みのスキーマがこの移行計画より新しいバージョンです'
         )
       for (let n = from + 1; n <= target; n++)
         if (typeof steps[n] !== 'function')
-          throw fail('INVALID_ARGUMENT', `Missing migration step ${n}`)
+          throw fail('INVALID_ARGUMENT', `移行ステップ ${n} がありません`)
       if (from === target)
         return { fromVersion: from, toVersion: target, applied: [] }
       const snapshot = await this.read(area, null)
@@ -269,7 +277,11 @@ export class StorageEngine {
       }
       let live = true
       const active = () => {
-        if (!live) throw fail('MIGRATION_FAILED', 'Migration draft is closed')
+        if (!live)
+          throw fail(
+            'MIGRATION_FAILED',
+            '移行の下書き（draft）はすでに閉じられています'
+          )
       }
       const api: MigrationDraft = {
         get: (k) => {
@@ -297,7 +309,7 @@ export class StorageEngine {
             throw new WebextError(
               'MIGRATION_FAILED',
               'storage.migrate',
-              `Migration step ${n} failed`,
+              `移行ステップ ${n} が失敗しました`,
               { cause, details: { step: n } }
             )
           }
@@ -397,7 +409,7 @@ export class StorageEngine {
     )
       throw fail(
         'QUOTA_EXCEEDED',
-        'Migration data and recovery journal exceed native capacity'
+        '移行データと復旧用のジャーナルがブラウザの保存容量を超えます'
       )
   }
 }
