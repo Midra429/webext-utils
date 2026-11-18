@@ -47,6 +47,7 @@ export interface SidePanelBackgroundOptions {
    * `true` にすると、ツールバーの拡張機能アイコン（action）のクリックでサイドパネルを開閉します。
    *
    * Manifest の `action.default_popup` を設定している場合、クリックはポップアップを開くため動作しません。
+   * Chrome では、クリックで Service Worker が起動した直後は、開いているパネルを閉じられないことがあります。
    *
    * @default false
    */

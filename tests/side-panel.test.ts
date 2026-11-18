@@ -558,6 +558,90 @@ describe('chrome', () => {
     expect(await panel.isOpen({ windowId: 9 })).toBe(true)
     registration()
   })
+
+  const present = (f: ReturnType<typeof fixture>, page = 'panel.html') =>
+    f.onMessage.emit(
+      {
+        protocol: '@midra/webext-utils/side-panel',
+        version: 1,
+        type: 'present',
+        windowId: 9,
+        page: `${f.root}${page}`,
+      },
+      { id: 'self', url: `${f.root}${page}` }
+    )
+
+  test('a restarted Background still publishes closed for a panel that reported itself', async () => {
+    const f = fixture('chrome')
+    f.background()
+    let stopBackground = panel.startBackground()
+    const events: string[] = []
+    const stops = [
+      panel.onOpened((e) => events.push(`opened:${e.windowId}:${e.page}`)),
+      panel.onClosed((e) => events.push(`closed:${e.windowId}:${e.page}`)),
+    ]
+    await panel.open({ windowId: 9 })
+    await tick()
+    // The worker restarts while the panel stays open; the panel answers the probe.
+    stopBackground()
+    stopBackground = panel.startBackground()
+    present(f, 'panel.html?view=a')
+    await panel.close({ windowId: 9 })
+    await tick()
+    expect(events).toEqual([
+      `opened:9:${f.root}panel.html`,
+      `closed:9:${f.root}panel.html?view=a`,
+    ])
+    for (const stop of stops) stop()
+    stopBackground()
+  })
+
+  test('a Background woken by the close event publishes closed with the configured page', async () => {
+    const f = fixture('chrome')
+    await panel.setPage('panel.html?view=b#top')
+    await panel.open({ windowId: 9 })
+    f.background()
+    const stopBackground = panel.startBackground()
+    const events: string[] = []
+    const stop = panel.onClosed((e) =>
+      events.push(`closed:${e.windowId}:${e.page}`)
+    )
+    await panel.close({ windowId: 9 })
+    await tick()
+    expect(events).toEqual([`closed:9:${f.root}panel.html?view=b#top`])
+    stop()
+    stopBackground()
+  })
+
+  test('opened and closed stay paired while the opened page is resolving', async () => {
+    const f = fixture('chrome')
+    f.background()
+    const stopBackground = panel.startBackground()
+    const events: string[] = []
+    const stops = [
+      panel.onOpened((e) => events.push(`opened:${e.windowId}`)),
+      panel.onClosed((e) => events.push(`closed:${e.windowId}`)),
+    ]
+    // A panel reporting itself early does not suppress the opened event.
+    void panel.open({ windowId: 9 })
+    present(f)
+    await tick()
+    await tick()
+    expect(events).toEqual(['opened:9'])
+    await panel.close({ windowId: 9 })
+    await tick()
+    expect(events).toEqual(['opened:9', 'closed:9'])
+    // Opened and closed before the page resolves: neither is published.
+    events.length = 0
+    void panel.open({ windowId: 9 })
+    present(f)
+    void panel.close({ windowId: 9 })
+    await tick()
+    await tick()
+    expect(events).toEqual([])
+    for (const stop of stops) stop()
+    stopBackground()
+  })
 })
 
 describe('firefox', () => {

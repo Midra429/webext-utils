@@ -92,6 +92,10 @@ chrome.contextMenus.onClicked.addListener((_info, tab) => {
 
 `toggle({ windowId })` を Background から呼ぶ場合は、`startBackground()` を登録しておくと、開閉の状態を同期的に判断してユーザー操作内で開閉できます。
 
+ただし Chrome では、Service Worker が起動した直後（アイコンのクリックで起動した場合など）は、開いているパネルからの報告がまだ届いていないため、開閉の状態を把握していません。
+このときの `toggle()` は「開く」として扱うため、すでに開いているパネルは閉じず、もう一度の操作で閉じます。
+状態を非同期で調べてから開閉すると、ユーザー操作の外になり開けなくなるため、この動作にしています。
+
 ### アイコンのクリックで開閉する
 
 `openOnActionClick: true` を指定すると、ツールバーの拡張機能アイコンをクリックしたときにパネルを開閉します。
@@ -107,6 +111,7 @@ webextSidePanel.startBackground({
 - Manifest の `action.default_popup` を設定している場合、クリックでポップアップが開くため `openOnActionClick` は動作しません（両ブラウザ共通）。
 - 他の `action.onClicked` リスナーも引き続き呼ばれます。
 - Background の起動ごとに登録が必要です（設定はブラウザに保存されません）。
+- Chrome では、クリックで Service Worker が起動した直後は開いているパネルを閉じられないことがあります（上記の `toggle()` の制約）。
 
 ## 開いているか確認する
 
@@ -188,6 +193,7 @@ stopClosed()
 - 通知を受け取れるのは Background と拡張機能のページ（ポップアップ・タブ・サイドパネル）です。Content Script には届きません。
 - 通知はリスナーの登録後に起きた開閉だけです。現在の状態は `isOpen()` で確認してください。
 - `page` はパネルに表示されているページの絶対 URL です（クエリとハッシュを含みます）。
+- Background の起動前から開いていたパネルが閉じた場合も `onClosed` は通知されます（`onOpened` は通知されません）。このときの `page` は、パネルが報告したページ、または閉じた時点の設定上のページです。
 - 通知は Background が配信します。Background の登録がないと通知されません。
 
 `registerPanel()` は1ページにつき1回です。戻り値を呼ぶと登録を解除します。戻り値の `ready` はウィンドウを特定して登録が完了すると解決します。

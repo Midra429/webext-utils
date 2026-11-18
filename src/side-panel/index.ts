@@ -205,10 +205,6 @@ function chromeChange(
 }
 
 /**
- * Opens or closes the panel. Firefox calls the native API synchronously so the
- * user gesture is kept; Chrome resolves the window first when it is omitted.
- */
-/**
  * Waits until isOpen() reports the new state. Native calls may resolve before
  * the panel document is created or destroyed (Chrome); this makes open/close
  * complete at the same point in every browser.
@@ -950,6 +946,7 @@ interface Port {
  * - {@link onOpened} / {@link onClosed} の通知を、すべての拡張機能のページへ配信します。
  * - `openOnActionClick: true` で、拡張機能アイコンのクリックでパネルを開閉します。
  * - Background から {@link toggle} を `windowId` 付きで呼んだときも、ユーザー操作内で開閉できます。
+ *   ただし Chrome では、Service Worker の起動直後は開閉状態をまだ把握していないため、開いているパネルも閉じずに「開く」として扱います。
  *
  * @returns 登録を解除する関数
  * @throws {WebextError} Background 以外では `CONTEXT_UNAVAILABLE`、二重登録は `INVALID_ARGUMENT`
@@ -1025,6 +1022,14 @@ function startBackground(
         // Chrome's event path drops the query and hash, so the configured
         // page is used to report the same URL as Firefox.
         const pages = new Map<number, string>()
+        /** Pages reported by registered panels (also after a worker restart). */
+        const reported = new Map<number, string>()
+        /** Windows whose opened event is still resolving its page. */
+        const resolving = new Set<number>()
+        const nativePage = (windowId: number, path: unknown) =>
+          effectivePage('event', windowId).catch(
+            () => pageUrl(path, 'event', true).href
+          )
         const nativeEvent = (type: EventType) => (info: unknown) => {
           const data = object(info)
           if (!validId(data?.windowId) || data.tabId !== undefined) return
@@ -1032,14 +1037,33 @@ function startBackground(
           if (type === 'closed') {
             windows.delete(windowId)
             const page = pages.get(windowId)
+            const fallback = reported.get(windowId)
             pages.delete(windowId)
-            if (page)
+            reported.delete(windowId)
+            if (page) {
               current.publish('closed', Object.freeze({ windowId, page }))
+              return
+            }
+            // Closed before its opened event was published: stay silent.
+            if (resolving.has(windowId)) return
+            // Opened while an earlier worker instance was running.
+            void (
+              fallback
+                ? Promise.resolve(fallback)
+                : nativePage(windowId, data.path)
+            )
+              .then((page) => {
+                if (hub === current)
+                  current.publish('closed', Object.freeze({ windowId, page }))
+              })
+              .catch(() => {
+                /* The native path does not belong to this extension. */
+              })
             return
           }
           windows.add(windowId)
-          void effectivePage('event', windowId)
-            .catch(() => pageUrl(data.path, 'event', true).href)
+          resolving.add(windowId)
+          void nativePage(windowId, data.path)
             .then((page) => {
               if (!windows.has(windowId) || pages.has(windowId)) return
               pages.set(windowId, page)
@@ -1048,11 +1072,14 @@ function startBackground(
             .catch(() => {
               /* The native path does not belong to this extension. */
             })
+            .finally(() => resolving.delete(windowId))
         }
         listen(['sidePanel', 'onOpened'], nativeEvent('opened'))
         listen(['sidePanel', 'onClosed'], nativeEvent('closed'))
         listen(['windows', 'onRemoved'], (id: unknown) => {
-          if (validId(id)) windows.delete(id)
+          if (!validId(id)) return
+          windows.delete(id)
+          reported.delete(id)
         })
         listen(
           ['runtime', 'onMessage'],
@@ -1064,6 +1091,7 @@ function startBackground(
             if (received) {
               const { windowId, page } = received.event
               windows.add(windowId)
+              reported.set(windowId, page)
               if (pages.has(windowId)) pages.set(windowId, page)
             }
             // isOpen() from other pages: only a known open window is answered,

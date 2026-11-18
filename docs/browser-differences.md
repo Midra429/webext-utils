@@ -17,7 +17,7 @@
 | --- | --- | --- | --- |
 | API | `sidePanel` | `sidebarAction` | `webextSidePanel` で共通化 |
 | 開く・閉じる | `open/close({ windowId })` | 引数なし（操作中のウィンドウ） | 操作中のウィンドウを対象に統一。`windowId` は操作したウィンドウを指定する前提 |
-| 開閉の切り替え | なし | `toggle()` | Chrome は開閉状態を調べて `open` / `close` |
+| 開閉の切り替え | なし | `toggle()` | Chrome は開閉状態を調べて `open` / `close`（Service Worker の起動直後は状態が分からず `open`） |
 | 開いているか | なし（`getContexts()` のパネルは `windowId: -1`） | `isOpen()` | Chrome はパネル側（`registerPanel()`）と Background（`startBackground()`）が状態を返す |
 | 開閉イベント | `onOpened` / `onClosed`（パスのクエリ・ハッシュは含まない） | なし | Background が配信。Chrome はネイティブのイベント、Firefox はパネルと Background の間の `runtime.Port` の切断で検出し、`page` は両方とも完全な URL |
 | 開閉の完了 | `close()` はパネルが閉じる前に完了する | — | 状態が反映されるまで待ってから完了（最大 1 秒） |
