@@ -283,7 +283,7 @@ export interface MessagingClient<O = {}> {
   /**
    * 受信ハンドラーを登録します。同じ JavaScript 環境で同じ名前は1つだけ登録できます。
    *
-   * Background 以外では、登録の完了を {@link ready} で待ってから送信側に知らせてください。
+   * Background 以外では登録の完了を {@link ready} で待ってから送信側に知らせてください。
    *
    * @returns ハンドラーを解除する関数
    *

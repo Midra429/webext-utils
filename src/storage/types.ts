@@ -117,7 +117,7 @@ export interface MigrationDraft {
   remove(key: string): void
 }
 
-/** 移行ステップです。下書きを変更します。同期・非同期どちらも可。 */
+/** 移行ステップです。下書きを変更します。同期でも非同期でもかまいません。 */
 export type MigrationStep = (draft: MigrationDraft) => void | Promise<void>
 
 /**
@@ -140,7 +140,7 @@ export interface MigrationPlan {
   /** `steps[n]` はバージョン `n - 1` から `n` への変更です。 */
   steps: Readonly<Record<number, MigrationStep>>
   /**
-   * `sync` 領域の移行で `true` が必要です。sync は端末をまたいで原子的に更新できないことへの同意です。
+   * `sync` 領域の移行で `true` が必要です。この指定は、sync が端末をまたいで原子的に更新できないことへの同意です。
    */
   allowNonAtomicSync?: boolean
 }
@@ -221,7 +221,7 @@ export interface StorageClient<S> {
     prefix: P
   ): StorageClient<StorageNamespace<S, P>>
   /**
-   * キーの変更を監視します。登録時点の値では呼ばれません。
+   * キーの変更を監視します。`callback` は登録時点の値では呼ばれません。
    *
    * @example
    * ```ts
@@ -260,7 +260,7 @@ export interface StorageClient<S> {
    */
   migrate(plan: MigrationPlan): Promise<MigrationResult>
   /**
-   * ISOLATED world で、キーを MAIN world に公開します。
+   * ISOLATED world でキーを MAIN world に公開します。
    *
    * @param bridge `messaging.installPageBridge()` で設置したブリッジ
    * @returns 公開を取り消す関数

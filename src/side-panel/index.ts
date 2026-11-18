@@ -322,7 +322,7 @@ function toggle(options?: SidePanelWindowOptions): Promise<void> {
  *
  * ユーザー操作は不要です。正しく判定するには、パネル側のページで {@link registerPanel} を
  * 呼び出してください（Chrome はブラウザ API からパネルのウィンドウを取得できないため、
- * パネル自身と Background の {@link startBackground} が状態を答えます）。
+ * パネル自身と Background の {@link startBackground} が状態を返します）。
  *
  * @param options 対象ウィンドウ。省略時は最後にフォーカスされたウィンドウ
  *
@@ -722,7 +722,7 @@ let registeredWindow: number | undefined
  * 現在のページをサイドパネルとして登録します。
  *
  * サイドパネルとして表示する HTML のスクリプトで、読み込み時に一度だけ呼び出してください。
- * 次の機能が、両ブラウザで同じように動くようになります。
+ * 次の機能が両ブラウザで同じように動くようになります。
  *
  * - {@link onOpened} / {@link onClosed} の通知（Background の {@link startBackground} も必要）
  * - {@link isOpen} / {@link toggle} による開閉状態の判定
