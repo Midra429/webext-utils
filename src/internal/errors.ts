@@ -136,8 +136,7 @@ export function classifyNativeError(
 
 const GESTURE =
   /(?:user gesture|user action|user activation|user input handler)/i
-const PERMISSION =
-  /(?:permission denied|missing.*permission|requires? .*permission|access denied|not allowed)/i
+const PERMISSION = /(?:permission|access denied|not allowed)/i
 const TAB = /(?:no tab with id|invalid tab id)/i
 const WINDOW = /(?:no window with id|invalid window id)/i
 const QUOTA = /(?:quota|MAX_WRITE|MAX_ITEMS|exceed.*(?:bytes|storage))/i

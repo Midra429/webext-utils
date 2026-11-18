@@ -7,7 +7,7 @@ import type {
 } from './types'
 
 import { object } from '../internal/browser'
-import { WebextError } from '../internal/errors'
+import { WebextError, classifyNativeError } from '../internal/errors'
 import { Environment } from '../messaging/environment'
 import {
   JOURNAL,
@@ -31,8 +31,6 @@ type Journal = {
   to: number
   entries: Entry[]
 }
-const quota = /quota|QUOTA|MAX_WRITE|MAX_ITEMS|exceed.*(?:bytes|storage)/i
-const permission = /permission|access denied|not allowed/i
 export class StorageEngine {
   private migrating = new Set<StorageArea>()
   constructor(
@@ -55,13 +53,8 @@ export class StorageEngine {
       return await fn(...args)
     } catch (cause) {
       if (cause instanceof WebextError) throw cause
-      const message = cause instanceof Error ? cause.message : String(cause)
       throw fail(
-        quota.test(message)
-          ? 'QUOTA_EXCEEDED'
-          : permission.test(message)
-            ? 'PERMISSION_DENIED'
-            : 'NATIVE_ERROR',
+        classifyNativeError(cause),
         `storage.${area}.${method} が失敗しました`,
         cause
       )
@@ -180,18 +173,17 @@ export class StorageEngine {
         'MIGRATION_CONFLICT',
         '移行中にバージョンが外部から変更されました'
       )
-    const current = await this.read(area, [...seen])
-    for (const e of journal.entries) {
-      if (
-        !equal(current[e.key], e.after) &&
-        (version === journal.to || !equal(current[e.key], e.before))
-      )
-        throw fail(
-          'MIGRATION_CONFLICT',
-          `移行中にデータが外部から変更されました: ${e.key}`
-        )
-    }
-    if (version !== journal.to) {
+    // The version is committed only after the data was verified, so a leftover
+    // journal has no role left. Later changes are ordinary data: keep them.
+    if (version === journal.from) {
+      const current = await this.read(area, [...seen])
+      for (const e of journal.entries) {
+        if (!equal(current[e.key], e.after) && !equal(current[e.key], e.before))
+          throw fail(
+            'MIGRATION_CONFLICT',
+            `移行中にデータが外部から変更されました: ${e.key}`
+          )
+      }
       const values = Object.fromEntries(
         journal.entries
           .filter((e) => Object.hasOwn(e, 'after'))

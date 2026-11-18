@@ -560,7 +560,7 @@ describe('storage recovery boundaries', () => {
     expect(s.native.data.session[META]).toEqual({ settings: 3 })
     expect(s.native.data.session[JOURNAL]).toBeUndefined()
   })
-  test('committed journal verifies data and preserves a later external change', async () => {
+  test('a committed journal is discarded and a later external change is kept', async () => {
     const s = setup()
     s.native.failure = (_area, method, arg) => {
       if (method === 'remove' && arg === JOURNAL)
@@ -570,12 +570,11 @@ describe('storage recovery boundaries', () => {
       s.storage.namespace('settings').migrate(plan)
     ).rejects.toThrow()
     s.native.failure = undefined
-    s.native.data.local['settings.theme'] = 'external'
-    await expect(s.storage.get('settings.theme')).rejects.toMatchObject({
-      code: 'MIGRATION_CONFLICT',
-    })
-    expect(s.native.data.local['settings.theme']).toBe('external')
-    expect(s.native.data.local[JOURNAL]).toBeDefined()
+    s.native.data.local['settings.theme'] = 'dark'
+    expect(await s.storage.get('settings.theme')).toBe('dark')
+    expect(s.native.data.local['settings.theme']).toBe('dark')
+    expect(s.native.data.local[JOURNAL]).toBeUndefined()
+    expect(s.native.data.local[META]).toEqual({ settings: 3 })
   })
   test('observed sync metadata change during readback prevents version commit', async () => {
     const s = setup('sync')

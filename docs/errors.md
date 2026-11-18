@@ -39,7 +39,7 @@ try {
 | `HANDLER_ERROR` | 受信ハンドラーが例外を投げた | 受信側のハンドラーを修正する |
 | `MIGRATION_FAILED` | 移行ステップが失敗した | `details.step` と `cause` を確認する |
 | `SCHEMA_TOO_NEW` | 保存済みのバージョンが移行計画より新しい | 拡張機能のバージョンを確認する |
-| `MIGRATION_CONFLICT` | 移行中のデータが外部から変更された | データとジャーナルを確認して解決する |
+| `MIGRATION_CONFLICT` | 移行中のデータが外部から変更された | データを確認し、ジャーナルを削除する（[ストレージ](storage.md#中断からの復旧)） |
 | `TAB_NOT_FOUND` / `WINDOW_NOT_FOUND` | 対象のタブ・ウィンドウが存在しない | 閉じられたものとして扱う |
 | `QUOTA_EXCEEDED` | 容量・件数・頻度の上限を超えた | 保存量や要求数を減らす |
 | `NATIVE_ERROR` | 上記以外のブラウザ API の失敗 | `cause` を確認する |

@@ -480,31 +480,35 @@ export class StorageRuntime {
     try {
       stopWatch = this.observe((changes, a) => {
         void (async () => {
-          for (const [id, sub] of Object.entries(await this.subscriptions())) {
-            if (sub.area !== a || !access[a]) continue
-            const filtered = changes.filter(
-              (c) =>
-                within(c.key, sub.prefix) &&
-                (!sub.keys || sub.keys.includes(c.key))
-            )
-            if (!filtered.length) continue
-            try {
-              await this.hub().send(
-                sub.receiver,
-                filtered,
-                { target: sub.target },
-                'notify',
-                new Set(),
-                false,
-                true
+          // Receivers are independent: an unresponsive tab must not delay others.
+          const entries = Object.entries(await this.subscriptions())
+          await Promise.all(
+            entries.map(async ([id, sub]) => {
+              if (sub.area !== a || !access[a]) return
+              const filtered = changes.filter(
+                (c) =>
+                  within(c.key, sub.prefix) &&
+                  (!sub.keys || sub.keys.includes(c.key))
               )
-            } catch (error) {
-              if (object(error)?.code === 'NO_RECEIVER')
-                await this.subscriptions((saved) => {
-                  delete saved[id]
-                })
-            }
-          }
+              if (!filtered.length) return
+              try {
+                await this.hub().send(
+                  sub.receiver,
+                  filtered,
+                  { target: sub.target },
+                  'notify',
+                  new Set(),
+                  false,
+                  true
+                )
+              } catch (error) {
+                if (object(error)?.code === 'NO_RECEIVER')
+                  await this.subscriptions((saved) => {
+                    delete saved[id]
+                  })
+              }
+            })
+          )
         })().catch(() => {})
       })
       const prune = (tabId: unknown, removed: boolean) => {

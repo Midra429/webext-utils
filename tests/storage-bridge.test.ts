@@ -424,6 +424,41 @@ describe('Content Script storage RPC', () => {
     await s.cleanup()
     expect(s.native.onChanged.listeners.size).toBe(0)
   })
+  test('an unresponsive receiver does not delay delivery to other subscriptions', async () => {
+    const s = setup(),
+      first: unknown[] = [],
+      second: unknown[] = []
+    const stopFirst = s.content.watch('settings.theme', (c) => first.push(c))
+    await stopFirst.ready
+    const stopSecond = s.content.watch('settings.theme', (c) => second.push(c))
+    await stopSecond.ready
+    const send = s.bg.send.bind(s.bg)
+    let release!: () => void
+    const hung = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let held = false
+    s.bg.send = async (...args: Parameters<typeof send>) => {
+      // Hold the first change delivery, as a tab that stopped responding would.
+      if (!held && Array.isArray(args[1]) && args[1].length) {
+        held = true
+        await hung
+      }
+      return await send(...args)
+    }
+    await s.trusted.set('settings.theme', 'dark')
+    await tick()
+    expect(first.length + second.length).toBe(1)
+    release()
+    await tick()
+    expect(first).toHaveLength(1)
+    expect(second).toHaveLength(1)
+    s.bg.send = send
+    stopFirst()
+    stopSecond()
+    await tick()
+    await s.cleanup()
+  })
   test('idle subscription survives router restart and reconnects only on delivery', async () => {
     const s = setup(),
       events: unknown[] = []

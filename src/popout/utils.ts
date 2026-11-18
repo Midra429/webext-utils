@@ -2,14 +2,13 @@ import type { ErrorCode } from '../internal/errors'
 import type { PopoutOptions } from './types'
 
 import { nativeMethod, object, validId } from '../internal/browser'
-import { WebextError, isWebextError } from '../internal/errors'
+import {
+  WebextError,
+  classifyNativeError,
+  isWebextError,
+} from '../internal/errors'
 import { POPOUT_PARAM } from '../internal/popout-record'
 import { isExtensionUrl, parseUrl } from '../internal/url'
-
-const TAB = /no tab with id|invalid tab id/i
-const WINDOW = /no window with id|invalid window id/i
-const PERMISSION = /permission|access denied/i
-const QUOTA = /quota/i
 
 export function fail(code: ErrorCode, message: string): never {
   throw new WebextError(code, 'popout', message)
@@ -17,16 +16,9 @@ export function fail(code: ErrorCode, message: string): never {
 export function convert(cause: unknown): WebextError {
   if (isWebextError(cause)) return cause
   const message = cause instanceof Error ? cause.message : String(cause)
-  const code = TAB.test(message)
-    ? 'TAB_NOT_FOUND'
-    : WINDOW.test(message)
-      ? 'WINDOW_NOT_FOUND'
-      : PERMISSION.test(message)
-        ? 'PERMISSION_DENIED'
-        : QUOTA.test(message)
-          ? 'QUOTA_EXCEEDED'
-          : 'NATIVE_ERROR'
-  return new WebextError(code, 'popout', message, { cause })
+  return new WebextError(classifyNativeError(cause), 'popout', message, {
+    cause,
+  })
 }
 export async function call(
   path: string[],
