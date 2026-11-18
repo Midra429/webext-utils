@@ -1,6 +1,6 @@
 # storage
 
-`webextStorage` は、`storage.local` / `sync` / `session` を型付きで読み書きし、変更を監視します。バージョン付きのデータ移行もできます。
+`webextStorage` は `storage.local` / `sync` / `session` を型付きで読み書きし、変更を監視します。バージョン付きのデータ移行もできます。
 
 ```ts
 import { webextStorage } from '@midra/webext-utils/storage'
@@ -28,7 +28,7 @@ await storage.remove('settings.theme')
 
 ### namespace
 
-`namespace(prefix)` で、プレフィックス配下だけを扱うクライアントを作れます。保存されるキーは変わりません。
+`namespace(prefix)` でプレフィックス配下だけを扱うクライアントを作れます。保存されるキーは変わりません。
 
 ```ts
 const settings = storage.namespace('settings')
@@ -89,9 +89,9 @@ const storage = webextStorage<Schema>({
 })
 ```
 
-- `get` / `set` で `false` を返すと `VALIDATION_ERROR` になります（validator が例外を投げた場合も同じで、`cause` に元の例外）。
+- `get` / `set` で validator が `false` を返すと `VALIDATION_ERROR` になります（validator が例外を投げた場合も同じで、`cause` に元の例外）。
 - 変更通知では、検証に失敗した値は配信しません。
-- 移行ステップ内では適用しません（古い形式のデータを扱うため）。
+- 移行ステップ内では validator を適用しません（古い形式のデータを扱うため）。
 
 保存できるのは JSON 互換の値だけです。`undefined` を含む値や `Date` などは `SERIALIZATION_ERROR` です。
 

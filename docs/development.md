@@ -4,11 +4,11 @@
 
 ## 方針
 
-- **ブラウザ差をなくす**: 公開 API は Chrome と Firefox で同じ引数・同じ結果にします。揃えられない機能は提供しません（[ブラウザ差の扱い](browser-differences.md)）。
-- **実行時の依存なし**: `dependencies` は空にします。開発用の依存は TypeScript・tsdown・Biome・Bun の型だけです。
-- **import に副作用なし**: import やクライアントの作成だけでは、ブラウザ API・リスナー・接続に触れません（`sideEffects: false`）。
-- **失敗を隠さない**: 失敗は `WebextError` で明示し、成功や「受信側なし」に読み替えません。
-- **公開 API には JSDoc**: 公開する関数・型・オプションには、説明と例を JSDoc で書きます。
+- ブラウザ差をなくす: 公開 API は Chrome と Firefox で同じ引数・同じ結果にします。揃えられない機能は提供しません（[ブラウザ差の扱い](browser-differences.md)）。
+- 実行時の依存なし: `dependencies` は空にします。開発用の依存は TypeScript・tsdown・Biome・Bun の型だけです。
+- import に副作用なし: import やクライアントの作成だけでは、ブラウザ API・リスナー・接続に触れません（`sideEffects: false`）。
+- 失敗を隠さない: 失敗は `WebextError` で明示し、成功や「受信側なし」に読み替えません。
+- 公開 API には JSDoc: 公開する関数・型・オプションには、説明と例を JSDoc で書きます。
 
 ## ディレクトリ構成
 
@@ -74,7 +74,7 @@ bun run build:example  # examples/dist に Chrome・Firefox 用の拡張機能�
 bun run test:runtime   # 偽のブラウザ API 上で資源の解放を計測
 ```
 
-`test:package` は、梱包したパッケージを一時ディレクトリに展開し、型（Bundler / NodeNext）、全サブパスの import、同梱の例、SSR、import の副作用、Tree Shaking、ドキュメント内のリンクを検査します。registry への書き込みはしません。
+`test:package` は `npm pack` したパッケージを一時ディレクトリに展開し、型（Bundler / NodeNext）、全サブパスの import、同梱の例、SSR、import の副作用、Tree Shaking、ドキュメント内のリンクを検査します。registry への書き込みはしません。
 
 ## 実ブラウザでの試験
 
@@ -105,7 +105,7 @@ bun run test:side-panel --firefox
 | `test:popout` | 同じ HTML の再利用、関連タブ、再読み込み、復旧 |
 | `test:side-panel` | 開閉・切り替え・状態・ページ設定（全体・ウィンドウ・タブ）・開閉通知を**両ブラウザで同じ手順**で検査 |
 
-`test:side-panel` は、クリックごとに1手順を実行します。Firefox で自動操作が拒否される場合は `--manual` を付け、表示されたボタンを手でクリックしてください。
+`test:side-panel` はクリックごとに1手順を実行します。Firefox で自動操作が拒否される場合は `--manual` を付け、表示されたボタンを手でクリックしてください。
 結果を保存する場合は `BROWSER_REPORT` / `POPOUT_REPORT` / `SIDE_PANEL_REPORT` / `PACKAGE_REPORT` / `RUNTIME_REPORT` に出力先を指定します。
 
 Linux で root として Chromium を動かす場合は `CHROME_FLAGS='--no-sandbox'` を指定してください（追加の起動引数として渡します）。

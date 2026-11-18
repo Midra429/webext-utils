@@ -1,6 +1,6 @@
 # side-panel
 
-`webextSidePanel` は、Chrome の `sidePanel` と Firefox の `sidebarAction` を**同じ関数・同じ引数・同じ結果**で扱います。
+`webextSidePanel` は Chrome の `sidePanel` と Firefox の `sidebarAction` を**同じ関数・同じ引数・同じ結果**で扱います。
 ブラウザによって使える機能が異なる部分は、どちらでも同じ動作になる形に揃えています（[ブラウザ差の扱い](browser-differences.md#サイドパネル)）。
 
 ```ts
@@ -54,7 +54,7 @@ webextSidePanel.registerPanel()
 
 ## 開く・閉じる
 
-ブラウザは、**ユーザー操作（クリック・キーボードショートカット・コンテキストメニューなど）の処理内**でしか開閉を許可しません。
+ブラウザは**ユーザー操作（クリック・キーボードショートカット・コンテキストメニューなど）の処理内**でしか開閉を許可しません。
 イベントハンドラーの中で、**`await` を挟まずに**呼び出してください。
 
 ```ts
@@ -77,7 +77,7 @@ button.addEventListener('click', async () => {
 
 ### Background から開閉する
 
-Background では、イベントから得たウィンドウ ID を渡して呼び出します。
+Background ではイベントから得たウィンドウ ID を渡して呼び出します。
 
 ```ts
 // background.ts
@@ -104,7 +104,7 @@ webextSidePanel.startBackground({
 })
 ```
 
-- Manifest の `action.default_popup` を設定している場合、クリックはポップアップを開くため動作しません（両ブラウザ共通）。
+- Manifest の `action.default_popup` を設定している場合、クリックでポップアップが開くため `openOnActionClick` は動作しません（両ブラウザ共通）。
 - 他の `action.onClicked` リスナーも引き続き呼ばれます。
 - Background の起動ごとに登録が必要です（設定はブラウザに保存されません）。
 
@@ -190,7 +190,7 @@ stopClosed()
 - `page` はパネルに表示されているページの絶対 URL です（クエリとハッシュを含みます）。
 - 通知は Background が配信します。Background の登録がないと通知されません。
 
-`registerPanel()` は1ページにつき1回です。戻り値を呼ぶと登録を解除します。`ready` はウィンドウを特定して登録が完了すると解決します。
+`registerPanel()` は1ページにつき1回です。戻り値を呼ぶと登録を解除します。戻り値の `ready` はウィンドウを特定して登録が完了すると解決します。
 
 ## エラー
 
@@ -206,10 +206,10 @@ stopClosed()
 
 ## 提供しない機能
 
-次の機能は、ブラウザの制約で両ブラウザの動作を揃えられないため提供していません。
+次の機能はブラウザの制約で両ブラウザの動作を揃えられないため提供していません。
 
-- **タブごとの開閉状態**（Chrome の「タブ専用パネル」）: Firefox で再現するには、タブを切り替えた瞬間に開閉する必要があります。Firefox の開閉はユーザー操作の処理内でしか呼べず、タブの切り替えはユーザー操作として扱われないため実現できません。
-- **アクティブでないウィンドウを指定した開閉**: Firefox の開閉はアクティブなウィンドウだけが対象です。先にウィンドウへフォーカスを移すと、その待ち時間でユーザー操作の扱いが失われます。
-- **ユーザー操作を伴わない開閉**: どちらのブラウザも許可していません。
+- タブごとの開閉状態（Chrome の「タブ専用パネル」）: Firefox で再現するには、タブを切り替えた瞬間に開閉する必要があります。Firefox の開閉はユーザー操作の処理内でしか呼べず、タブの切り替えはユーザー操作として扱われないため実現できません。
+- アクティブでないウィンドウを指定した開閉: Firefox の開閉はアクティブなウィンドウだけが対象です。先にウィンドウへフォーカスを移すと、その待ち時間でユーザー操作の扱いが失われます。
+- ユーザー操作を伴わない開閉: どちらのブラウザも許可していません。
 
 参考: [Chrome sidePanel](https://developer.chrome.com/docs/extensions/reference/api/sidePanel) / [Firefox sidebarAction](https://developer.mozilla.org/en-US/docs/Mozilla/Add-ons/WebExtensions/API/sidebarAction)

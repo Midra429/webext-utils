@@ -3,9 +3,9 @@
 このライブラリは、Chrome と Firefox で**同じコードが同じ結果になる**ことを目標にしています。
 ブラウザ API の差は次のいずれかの方法で解消しています。
 
-1. **内部で吸収する**: 内部でブラウザごとに異なる API を呼び分け、同じ結果を返す
-2. **独自に実装する**: 片方のブラウザにない機能を、両方で同じ仕組みで実装する
-3. **揃えられない機能は提供しない**: 動作を揃えられない機能は API に含めない（または両方で同じエラーにする）
+1. 内部で吸収する: 内部でブラウザごとに異なる API を呼び分け、同じ結果を返す
+2. 独自に実装する: 片方のブラウザにない機能を、両方で同じ仕組みで実装する
+3. 揃えられない機能は提供しない: 動作を揃えられない機能は API に含めない（または両方で同じエラーにする）
 
 ライブラリでは揃えられないものは、Manifest の書式と [ブラウザ自体の制約](#ライブラリの外にある差) だけです。
 
@@ -18,7 +18,7 @@
 | API | `sidePanel` | `sidebarAction` | `webextSidePanel` で共通化 |
 | 開く・閉じる | `open/close({ windowId })` | 引数なし（操作中のウィンドウ） | 操作中のウィンドウを対象に統一。`windowId` は操作したウィンドウを指定する前提 |
 | 開閉の切り替え | なし | `toggle()` | Chrome は開閉状態を調べて `open` / `close` |
-| 開いているか | なし（`getContexts()` のパネルは `windowId: -1`） | `isOpen()` | Chrome はパネル側（`registerPanel()`）と Background（`startBackground()`）が状態を答える |
+| 開いているか | なし（`getContexts()` のパネルは `windowId: -1`） | `isOpen()` | Chrome はパネル側（`registerPanel()`）と Background（`startBackground()`）が状態を返す |
 | 開閉イベント | `onOpened` / `onClosed`（パスのクエリ・ハッシュは含まない） | なし | Background が配信。Chrome はネイティブのイベント、Firefox はパネルと Background の間の `runtime.Port` の切断で検出し、`page` は両方とも完全な URL |
 | 開閉の完了 | `close()` はパネルが閉じる前に完了する | — | 状態が反映されるまで待ってから完了（最大 1 秒） |
 | アイコンのクリックで開閉 | `setPanelBehavior()`（設定を保存） | なし | 両方とも `action.onClicked` で実装し、起動ごとに登録 |
@@ -61,7 +61,7 @@
 
 ## ライブラリの外にある差
 
-次の差は、ブラウザ（または拡張機能のビルド）の側で解決する必要があります。
+次の差はブラウザ（または拡張機能のビルド）の側で解決する必要があります。
 
-- **Manifest の書式**: Background（`service_worker` / `scripts`）、サイドパネル（`side_panel` / `sidebar_action`）、Firefox の `browser_specific_settings` など。例は [はじめに](getting-started.md) と [examples](../examples/README.md) にあります。
-- **ユーザー操作の判定**: `await` の後もユーザー操作として扱うかはブラウザが決めます。サイドパネルの開閉は、ユーザー操作のハンドラー内で `await` を挟まずに呼んでください（両方のブラウザで確実に動きます）。
+- Manifest の書式: Background（`service_worker` / `scripts`）、サイドパネル（`side_panel` / `sidebar_action`）、Firefox の `browser_specific_settings` など。例は [はじめに](getting-started.md) と [examples](../examples/README.md) にあります。
+- ユーザー操作の判定: `await` の後もユーザー操作として扱うかはブラウザが決めます。サイドパネルの開閉はユーザー操作のハンドラー内で `await` を挟まずに呼んでください（両方のブラウザで確実に動きます）。

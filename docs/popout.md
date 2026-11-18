@@ -1,6 +1,6 @@
 # popout
 
-`webextPopout` は、ポップアップやサイドパネルと同じ HTML を、独立したウィンドウ（popout）で開きます。
+`webextPopout` はポップアップやサイドパネルと同じ HTML を、独立したウィンドウ（popout）で開きます。
 
 ```ts
 import { webextPopout } from '@midra/webext-utils/popout'
@@ -68,7 +68,7 @@ console.log(popout.windowId)
 | `unsupported` | 呼び出し元がポップアップではない |
 | `failed` | 閉じられなかった（`error` を参照）。popout は開いています |
 
-サイドパネルは、popout を開いた後には閉じられません（ブラウザがユーザー操作を要求するため）。そのため `source: 'side-panel'` では指定できません。閉じる場合は、ユーザー操作の処理内で `webextSidePanel.close()` を呼び出してください。
+サイドパネルは popout を開いた後には閉じられません（ブラウザがユーザー操作を要求するため）。そのため `source: 'side-panel'` では `closeOriginal` を指定できません。閉じる場合は、ユーザー操作の処理内で `webextSidePanel.close()` を呼び出してください。
 
 ## ハンドル
 
@@ -117,5 +117,5 @@ if (current) {
 ## 仕組みと制約
 
 - popout の情報は Background が `storage.session` に保存し、ページの再読み込みや Background の再起動後も復元します。ブラウザの再起動をまたいでは復元しません。
-- popout のウィンドウやタブを閉じたり、別の URL に移動したりすると、管理を終了します。関連タブが閉じられても popout は管理を続けます。
+- popout のウィンドウやタブを閉じたり、別の URL に移動したりすると、管理を終了します。関連タブが閉じられても、popout の管理は続けます。
 - 元の UI のメモリ上の状態はコピーされません（同じ HTML を新しく読み込みます）。状態は storage や messaging で共有してください。

@@ -1,6 +1,6 @@
 # messaging
 
-`webextMessaging` は、Background・Content Script・拡張機能のページ（ポップアップ・サイドパネル・popout・タブ）の間で、型付きのメッセージを送受信します。
+`webextMessaging` は Background・Content Script・拡張機能のページ（ポップアップ・サイドパネル・popout・タブ）の間で、型付きのメッセージを送受信します。
 
 ```ts
 import { webextMessaging } from '@midra/webext-utils/messaging'
@@ -39,7 +39,7 @@ const messaging = webextMessaging() // WebextMessages の型を使う
 
 ## 初期化
 
-Background では、最初の `await` より前にルーターを開始し、受信ハンドラーを登録します。
+Background では最初の `await` より前にルーターを開始し、受信ハンドラーを登録します。
 
 ```ts
 // background.ts
@@ -139,14 +139,14 @@ messaging.on('tab:highlight', (data, sender) => {
 JSON 互換の値（有限の数値・文字列・真偽値・`null`・配列・プレーンオブジェクト）だけを扱います。
 
 - トップレベルの `undefined` は「データなし」として送れます。
-- `Date`・`Map`・`Set`・関数・循環参照・オブジェクト内の `undefined` などは `SERIALIZATION_ERROR` です（黙って変換しません）。
+- `Date`・`Map`・`Set`・関数・循環参照・オブジェクト内の `undefined` などは `SERIALIZATION_ERROR` です（気づかないうちに変換されることはありません）。
 - 1メッセージは深さ 64、要素数 100,000、UTF-8 で 1 MiB までです。
 
 ## 寿命と再接続
 
 - 1つの JavaScript 環境（ページ・Content Script）につき1本の接続を共有します。同じ名前のハンドラーは1つだけ登録できます。
 - Background が停止・再起動しても、次の送信時に受信先を復元します。定期的な通信（heartbeat）はしません。
-- 送信中に失われた要求は自動で再送しません。解除やタイムアウトは、既に始まった処理を取り消しません。
+- 送信中に失われた要求は自動で再送しません。解除やタイムアウトは既に始まった処理を取り消しません。
 - ページを閉じるときは `dispose()` を呼ぶと、ハンドラーと待機中の処理をまとめて解除できます。
 
 ## エラー

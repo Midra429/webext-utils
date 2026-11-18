@@ -17,7 +17,7 @@ try {
 }
 ```
 
-`WebextError` / `isWebextError` / `ErrorCode` は、ルートとすべてのサブパスから import できます。
+`WebextError` / `isWebextError` / `ErrorCode` はルートとすべてのサブパスから import できます。
 
 ## コード一覧
 
@@ -46,4 +46,4 @@ try {
 
 ## 通信をまたぐエラー
 
-messaging でハンドラーから返ったエラーは、`code` と `message` だけが送信側に届きます（`cause` やスタックトレースは送りません）。MAIN world に返すエラーは、コードと定型のメッセージだけです。
+messaging でハンドラーから返ったエラーは、`code` と `message` だけが送信側に届きます（`cause` やスタックトレースは送りません）。MAIN world に返すエラーはコードと定型のメッセージだけです。

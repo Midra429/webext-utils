@@ -10,7 +10,7 @@ MAIN world ──(CustomEvent)── ISOLATED world ──(拡張機能の通信
 
 MAIN world は Web ページと同じ信頼度です。ページ上の他のスクリプトも同じ操作を呼び出せるため、秘密情報や任意の操作を公開しないでください。
 
-## ISOLATED world: ブリッジを設置する
+## ISOLATED world でブリッジを設置する
 
 ```ts
 // isolated.ts
@@ -56,7 +56,7 @@ validator は型ガード関数です。`false` を返すか例外を投げる�
 
 ブリッジはページの破棄・BFCache を自動で処理します。不要になったら `bridge.dispose()`（または `messaging.dispose()`）で撤去します。
 
-## MAIN world: ブリッジを使う
+## MAIN world でブリッジを使う
 
 ```ts
 // main.ts（"world": "MAIN" の Content Script）
@@ -86,7 +86,7 @@ await messaging.send('page:title', undefined, {
 
 ## storage を公開する
 
-ISOLATED world で、キーごとに読み込み・書き込み・監視を許可します。公開するすべてのキーに validator が必要です。
+ISOLATED world でキーごとに読み込み・書き込み・監視を許可します。公開するすべてのキーに validator が必要です。
 
 ```ts
 // isolated.ts
@@ -121,15 +121,15 @@ publicStorage.watch('settings.theme', ({ newValue }) => console.log(newValue))
 
 ## 負荷の扱い
 
-ブリッジには、要求の数やサイズに関する独自の上限はありません。ページ上の任意のスクリプトが要求を送れることを前提に、次の方法で拡張機能を守ります。
+ブリッジには要求の数やサイズに関する独自の上限はありません。ページ上の任意のスクリプトが要求を送れることを前提に、次の方法で拡張機能を守ります。
 
-- **ページ由来の処理は document ごとに1件ずつ**: Background に届く処理（`fromPage` の送信、storage の操作、受信ハンドラーの登録）は、同じ document の要求を順番に1件ずつ実行します。チャネルが複数あっても同じ順番待ちを使います。大量に送られても、全タブで共有する Background に同時に届くのは1つの document（フレーム）につき1件だけで、待ち行列はそのページのプロセスに溜まります。
-- **待ち時間も期限に含める**: 順番を待つ間に `timeoutMs`（既定 10 秒）を過ぎた要求は、Background に送らずに `TIMEOUT` で終わります。
-- **Background に届くデータは共通の形式に従う**: 拡張機能の通信全体と同じく、JSON 互換・深さ 64・UTF-8 で 1 MiB までです。これを超える値は `SERIALIZATION_ERROR` です。ブリッジ内で受信したデータの解析・検査は、入れ子がどれだけ深くても処理できる方法で行います。
+- Background に届くページ由来の処理（`fromPage` の送信、storage の操作、受信ハンドラーの登録）は、同じ document の要求を順番に1件ずつ実行します。チャネルが複数あっても同じ順番待ちを使います。大量に送られても、全タブで共有する Background に同時に届くのは1つの document（フレーム）につき1件だけで、待ち行列はそのページのプロセスに溜まります。
+- `timeoutMs`（既定 10 秒）の期限には順番を待つ時間も含まれ、待つ間に期限を過ぎた要求は Background に送らずに `TIMEOUT` で終わります。
+- Background に届くデータは拡張機能の通信全体と共通の形式に従い、JSON 互換・深さ 64・UTF-8 で 1 MiB までです。これを超える値は `SERIALIZATION_ERROR` です。ブリッジ内で受信したデータの解析・検査は、入れ子がどれだけ深くても処理できる方法で行います。
 
 ISOLATED world と MAIN world の Content Script は、そのページと同じタブのプロセスで動きます。そのため、巨大なデータや大量の要求による解析・待機の負荷は、ページが自分で重い処理をした場合と同じく、そのタブの中にとどまります。
 
-注意点:
+注意点は次のとおりです。
 
 - ページ由来の要求は並列に実行されません。時間のかかる要求を同時に複数送ると、後の要求はその分だけ待ちます。
 - MAIN world の受信ハンドラーの中から別の要求を送って応答を待つと、待ちが循環して `TIMEOUT` になることがあります（外側の要求が終わるまで内側の要求が始まらないため）。

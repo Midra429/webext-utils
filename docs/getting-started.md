@@ -5,7 +5,7 @@
 ## 1. Manifest を用意する
 
 Manifest の書式だけはブラウザごとに異なります（ライブラリは Manifest を書き換えません）。
-以下は、ポップアップ・サイドパネル・Content Script を持つ拡張機能の例です。
+以下はポップアップ・サイドパネル・Content Script を持つ拡張機能の例です。
 
 **Chrome** (`manifest.json`)
 
@@ -163,7 +163,7 @@ await messaging.ready() // Background への登録完了を待つ
 const theme = await webextStorage<Schema>().get('settings.theme')
 ```
 
-Background や UI からは、タブ ID を指定して Content Script に送信できます。
+Background や UI からはタブ ID を指定して Content Script に送信できます。
 
 ```ts
 const title = await messaging.send('page:title', undefined, {
